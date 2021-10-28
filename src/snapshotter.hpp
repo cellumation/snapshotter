@@ -5,6 +5,8 @@
 #include <unordered_set>
 #include "ShapeShifterMsg.hpp"
 
+namespace snapshotter
+{
 class Snapshotter
 {
 public:
@@ -37,3 +39,5 @@ private:
 
 
 };
+
+}//end namespace

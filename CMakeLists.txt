@@ -39,6 +39,8 @@ include_directories(
 add_library(${PROJECT_NAME}
   src/snapshotter.cpp
   src/snapshotter.hpp
+  src/ShapeShifterMsg.hpp
+  src/ShapeShifterMsg.cpp
 )
 
 target_link_libraries(${PROJECT_NAME}
