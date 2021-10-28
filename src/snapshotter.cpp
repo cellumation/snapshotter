@@ -1,7 +1,8 @@
 #include "snapshotter.hpp"
+
 #include <topic_tools/shape_shifter.h>
 
-using ShapeShifter = topic_tools::ShapeShifter;
+using ShapeShifter = snapshotter::ShapeShifterMsg;
 using Subscriber = ros::Subscriber;
 
 Snapshotter::Snapshotter(ros::NodeHandle& nh, const Snapshotter::Config& cfg) :
@@ -23,15 +24,15 @@ void Snapshotter::subscribe(const std::string& topic)
 //   ops.helper = boost::make_shared<ros::SubscriptionCallbackHelperT<const ros::MessageEvent<topic_tools::ShapeShifter const>&> >(
 //           boost::bind(&Snapshotter::topicCB, this, _1, queue));
 
-  ops.helper = boost::make_shared<ros::SubscriptionCallbackHelperT<const ros::MessageEvent<topic_tools::ShapeShifter const>&> >(
+  ops.helper = boost::make_shared<ros::SubscriptionCallbackHelperT<const ros::MessageEvent<ShapeShifter const>&> >(
            boost::bind(&Snapshotter::topicCB, this, _1));
 
   subscribers.push_back(nh.subscribe(ops));
 }
 
 
-void Snapshotter::topicCB(const ros::MessageEvent<topic_tools::ShapeShifter const>& msg)
+void Snapshotter::topicCB(const ros::MessageEvent<ShapeShifter const>& msg)
 {
-    msgDefs.emplace(msg.getConstMessage()->getMessageDefinition());
-    ROS_INFO_STREAM(msgDefs.size());
+    // msgDefs.emplace(msg.getConstMessage()->getMessageDefinition());
+    // ROS_INFO_STREAM(msgDefs.size());
 }

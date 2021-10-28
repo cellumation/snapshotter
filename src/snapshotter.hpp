@@ -3,7 +3,7 @@
 #include <vector>
 #include <topic_tools/shape_shifter.h>
 #include <unordered_set>
-
+#include "ShapeShifterMsg.hpp"
 
 class Snapshotter
 {
@@ -23,7 +23,7 @@ public:
 
 private:
 
-    void topicCB(const ros::MessageEvent<topic_tools::ShapeShifter const>& msg);
+    void topicCB(const ros::MessageEvent<snapshotter::ShapeShifterMsg const>& msg);
 
 
     ros::NodeHandle& nh;
