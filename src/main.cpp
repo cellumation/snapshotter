@@ -1,5 +1,6 @@
 #include "ros/ros.h"
 #include "snapshotter.hpp"
+#include <snapshotter_2/TakeSnapshot.h>
 
 using namespace snapshotter;
 
@@ -25,6 +26,20 @@ int main(int argc, char **argv)
         }
     };
     ros::Timer topicCheck = nh.createTimer(ros::Duration(2.0),subscribeTopics);
+
+
+
+    boost::function<bool (snapshotter_2::TakeSnapshotRequest&,
+                          snapshotter_2::TakeSnapshotResponse&)> takeSnapshotCb =
+    [&snapshotter] (snapshotter_2::TakeSnapshotRequest& req,
+                    snapshotter_2::TakeSnapshotResponse& resp)
+    {
+        //TODO error handling!
+        snapshotter.writeBagFile(req.filename);
+        resp.success = true;
+        return true;
+    };
+    auto serv = nh.advertiseService("take_snapshot",takeSnapshotCb);
 
     ros::spin();
 }

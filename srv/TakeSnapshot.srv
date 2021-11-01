@@ -1,0 +1,5 @@
+string filename   # Name of bag file to save snapshot to. Needs to be a full path ending in .bag
+---
+
+bool success    # True if snapshot succesfully written to disk
+string message  # Error description if failed

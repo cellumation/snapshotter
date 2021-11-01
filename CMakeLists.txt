@@ -24,9 +24,9 @@ find_package(Boost REQUIRED COMPONENTS program_options system)
 
 
 # add_message_files(DIRECTORY msg FILES SnapshotStatus.msg)
-# add_service_files(DIRECTORY srv FILES TriggerSnapshot.srv)
+add_service_files(DIRECTORY srv FILES TakeSnapshot.srv)
 
-# generate_messages(DEPENDENCIES rosgraph_msgs std_msgs)
+generate_messages(DEPENDENCIES rosgraph_msgs std_msgs)
 
 catkin_package(CATKIN_DEPENDS ${catkinDependencies} message_runtime)
 
