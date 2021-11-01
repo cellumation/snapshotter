@@ -8,6 +8,12 @@ void ShapeShifterMsg::setConnectionHeader(boost::shared_ptr<std::map<std::string
     connectionHeader = header;
 }
 
+const boost::shared_ptr<std::map<std::string, std::string>> ShapeShifterMsg::getConnectionHeader() const
+{
+    return connectionHeader;
+}
+
+//TODO throw if connection header does not contain keys
 const std::string& ShapeShifterMsg::getDataType() const
 {
     if(connectionHeader)
@@ -26,6 +32,12 @@ const std::string& ShapeShifterMsg::getMessageDefinition() const
 {
     if(connectionHeader)
         return (*connectionHeader)["message_definition"];
+    throw std::runtime_error("ShapeShifterMsg connectionHeader not set");
+}
+const std::string& ShapeShifterMsg::getTopic() const
+{
+    if(connectionHeader)
+        return (*connectionHeader)["topic"];
     throw std::runtime_error("ShapeShifterMsg connectionHeader not set");
 }
 

@@ -1,6 +1,7 @@
 #pragma once
 #include <deque>
 #include "ShapeShifterMsg.hpp"
+#include <ros/time.h>
 
 namespace snapshotter
 {
@@ -11,22 +12,26 @@ class RingBuffer
 public:
     RingBuffer(size_t maxSize) : maxSize(maxSize), currentSize(0) {}
 
-    void push(const ShapeShifterMsg& msg)
-    {
-        while(currentSize + msg.objectSize() > maxSize)
-        {
-            currentSize -= buffer.front().objectSize();
-            buffer.pop_front();
-        }
-        currentSize += msg.objectSize();
-        //TODO avoid the copy, replace with move
-        buffer.push_back(msg);
-    }
+    void push(const ShapeShifterMsg& msg, const ros::Time& receiveTime);
+
+    /**writes the content of the buffer to a bag file */
+    void writeToBag(const std::string& path) const;
+    /**Removes all entries from this buffer */
+    void clear();
 
 private:
+
+    struct BufferEntry
+    {
+        ShapeShifterMsg msg;
+        ros::Time receiveTime;
+        BufferEntry(const ShapeShifterMsg& msg, const ros::Time& receiveTime) :
+            msg(msg), receiveTime(receiveTime) {}
+    };
+
     size_t maxSize;
     size_t currentSize;
-    std::deque<ShapeShifterMsg> buffer;
+    std::deque<BufferEntry> buffer;
 };
 
 

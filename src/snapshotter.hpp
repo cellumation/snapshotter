@@ -23,6 +23,10 @@ public:
      *  If the topic is already subscribed nothing will happen. */
     void subscribe(const std::string& topic);
 
+    /**Stops recording, writes the bag and restarts recording
+     * @throw std::runtime_error on error     */
+    void writeBagFile(const std::string& path);
+
 
 private:
 
@@ -32,7 +36,9 @@ private:
     ros::NodeHandle& nh;
     Config cfg;
     std::vector<ros::Subscriber> subscribers;
+    std::unordered_set<std::string> subscribedTopics;
     RingBuffer buffer;
+    bool stopRecording;/**if true no topics will be recorded */
 
 };
 

@@ -27,11 +27,15 @@ public:
 
 
     void setConnectionHeader(boost::shared_ptr<std::map<std::string, std::string>> header);
+    const boost::shared_ptr<std::map<std::string, std::string>> getConnectionHeader() const;
+
 
     const std::string& getDataType() const;
     const std::string& getMD5Sum() const;
     const std::string& getMessageDefinition() const;
+    const std::string& getTopic() const;
     bool getLatching() const;
+
 
 
     /**Write serialized message contents out to a stream */
@@ -47,6 +51,9 @@ public:
 
     /** Return the size that this object consumes in memory */
     size_t objectSize() const;
+
+    void setReceiptTime(const ros::Time& time);
+    const ros::Time& getReceiptTime() const;
 
 private:
 

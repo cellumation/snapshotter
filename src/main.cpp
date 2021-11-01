@@ -12,15 +12,19 @@ int main(int argc, char **argv)
     cfg.maxMemoryBytes = 1 * 1024 * 1024 * 1024;
     Snapshotter snapshotter(nh, cfg);
 
-    ros::master::V_TopicInfo allTopics;
-    if(ros::master::getTopics(allTopics))
+    boost::function<void (const ros::TimerEvent&)> subscribeTopics =
+    [&snapshotter] (const ros::TimerEvent&)
     {
-        for(const ros::master::TopicInfo& ti : allTopics)
+        ros::master::V_TopicInfo allTopics;
+        if(ros::master::getTopics(allTopics))
         {
-            snapshotter.subscribe(ti.name);
+            for(const ros::master::TopicInfo& ti : allTopics)
+            {
+                snapshotter.subscribe(ti.name);
+            }
         }
-    }
+    };
+    ros::Timer topicCheck = nh.createTimer(ros::Duration(2.0),subscribeTopics);
 
     ros::spin();
-
 }
