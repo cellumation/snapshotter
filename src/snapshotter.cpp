@@ -4,8 +4,11 @@
 
 using Subscriber = ros::Subscriber;
 
+namespace snapshotter
+{
+
 Snapshotter::Snapshotter(ros::NodeHandle& nh, const Snapshotter::Config& cfg) :
-    nh(nh), cfg(cfg)
+    nh(nh), cfg(cfg), buffer(cfg.maxMemoryBytes)
 {
 
 }
@@ -32,7 +35,7 @@ void Snapshotter::subscribe(const std::string& topic)
 
 void Snapshotter::topicCB(const ros::MessageEvent<ShapeShifterMsg const>& msg)
 {
-    msg.
-    // msgDefs.emplace(msg.getConstMessage()->getMessageDefinition());
-    // ROS_INFO_STREAM(msgDefs.size());
+    buffer.push(*msg.getConstMessage());
 }
+
+}//end namespace

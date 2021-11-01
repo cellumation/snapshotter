@@ -4,6 +4,7 @@
 #include <topic_tools/shape_shifter.h>
 #include <unordered_set>
 #include "ShapeShifterMsg.hpp"
+#include "RingBuffer.hpp"
 
 namespace snapshotter
 {
@@ -13,7 +14,7 @@ public:
 
     struct Config
     {
-        size_t maxMemoryMb;
+        size_t maxMemoryBytes;
     };
 
     Snapshotter(ros::NodeHandle& nh, const Config& cfg);
@@ -25,18 +26,13 @@ public:
 
 private:
 
-    void topicCB(const ros::MessageEvent<snapshotter::ShapeShifterMsg const>& msg);
+    void topicCB(const ros::MessageEvent<ShapeShifterMsg const>& msg);
 
 
     ros::NodeHandle& nh;
     Config cfg;
-
     std::vector<ros::Subscriber> subscribers;
-
-    std::unordered_set<std::string> msgDefs;
-
-
-
+    RingBuffer buffer;
 
 };
 

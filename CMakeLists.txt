@@ -41,6 +41,7 @@ add_library(${PROJECT_NAME}
   src/snapshotter.hpp
   src/ShapeShifterMsg.hpp
   src/ShapeShifterMsg.cpp
+  src/RingBuffer.hpp
 )
 
 target_link_libraries(${PROJECT_NAME}

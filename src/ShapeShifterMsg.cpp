@@ -41,4 +41,9 @@ size_t ShapeShifterMsg::size() const
     return data.size();
 }
 
+size_t ShapeShifterMsg::objectSize() const
+{
+    return data.size() + sizeof(ShapeShifterMsg);
+}
+
 } //end namespace

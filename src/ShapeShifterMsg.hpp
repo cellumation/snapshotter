@@ -45,6 +45,8 @@ public:
     //! Return the size of the serialized message
     size_t size() const;
 
+    /** Return the size that this object consumes in memory */
+    size_t objectSize() const;
 
 private:
 
