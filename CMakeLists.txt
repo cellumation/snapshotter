@@ -81,11 +81,12 @@ install(DIRECTORY launch/
 #############
 ## Testing ##
 #############
-# find_package(rostest REQUIRED)
-# find_package(gtest)
+find_package(rostest REQUIRED)
+find_package(gtest)
 
-# catkin_add_gtest(utest test/launch_test.test test/test_node.cpp)
-# target_link_libraries(utest
-#     ${catkin_LIBRARIES}
-#     ${Boost_LIBRARIES}
-#     stdc++fs)
+catkin_add_gtest(utest test/launch_test.test test/test_node.cpp)
+target_link_libraries(utest
+    ${catkin_LIBRARIES}
+    ${Boost_LIBRARIES}
+    ${PROJECT_NAME}
+    stdc++fs)

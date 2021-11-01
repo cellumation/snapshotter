@@ -12,12 +12,10 @@ namespace snapshotter
 
 /** A memory efficient re-implementation of the ros topic_tools::ShapeShifter.
  * The original shape_shifter creates a copy of the connection_header. This leads to
- * lots of memory overhead because the connection_header rarely changes while a connection
- * is open.
+ * lots of memory overhead.
  * Instead of copying the connection_header this implementation retains a shared_ptr to the
  * original connection_header provided during deserialization. The connection_header is
- * re-used for all messages of the same connection.
- */
+ * re-used for all messages of the same connection. */
 class ShapeShifterMsg
 {
 public:
@@ -35,8 +33,6 @@ public:
     const std::string& getMessageDefinition() const;
     const std::string& getTopic() const;
     bool getLatching() const;
-
-
 
     /**Write serialized message contents out to a stream */
     template<typename Stream>
