@@ -63,8 +63,7 @@ void ShapeShifterMsg::write(Stream& stream) const
 template<typename Stream>
 void ShapeShifterMsg::read(Stream& stream)
 {
-  data.resize(stream.getLength());
-  memcpy(data.data(), stream.getData(), stream.getLength());
+    data.insert(data.end(), stream.getData(), stream.getData() + stream.getLength());
 }
 
 }
