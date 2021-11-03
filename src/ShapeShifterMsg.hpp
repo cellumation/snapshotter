@@ -11,7 +11,7 @@ namespace snapshotter
 {
 
 /** A memory efficient re-implementation of the ros topic_tools::ShapeShifter.
- * The original shape_shifter creates a copy of the connection_header. This leads to
+ * The original topic_tools::ShapeShifter creates a copy of the connection_header. This leads to
  * lots of memory overhead.
  * Instead of copying the connection_header this implementation retains a shared_ptr to the
  * original connection_header provided during deserialization. The connection_header is
