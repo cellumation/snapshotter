@@ -2,6 +2,7 @@
 #include <deque>
 #include "ShapeShifterMsg.hpp"
 #include <ros/time.h>
+#include <mutex>
 
 namespace snapshotter
 {
@@ -10,9 +11,10 @@ namespace snapshotter
 class RingBuffer
 {
 public:
+
     RingBuffer(size_t maxSize) : maxSize(maxSize), currentSize(0) {}
 
-    void push(const ShapeShifterMsg& msg, const ros::Time& receiveTime);
+    void push(ShapeShifterMsg::ConstPtr msg, const ros::Time& receiveTime);
 
     /**writes the content of the buffer to a bag file */
     void writeToBag(const std::string& path) const;
@@ -23,15 +25,17 @@ private:
 
     struct BufferEntry
     {
-        ShapeShifterMsg msg;
+        ShapeShifterMsg::ConstPtr msg;
         ros::Time receiveTime;
-        BufferEntry(const ShapeShifterMsg& msg, const ros::Time& receiveTime) :
-            msg(msg), receiveTime(receiveTime) {}
+        BufferEntry(ShapeShifterMsg::ConstPtr msg, const ros::Time& receiveTime) :
+            msg(std::move(msg)), receiveTime(receiveTime) {}
     };
+
 
     size_t maxSize;
     size_t currentSize;
     std::deque<BufferEntry> buffer;
+    std::mutex bufferLock;
 };
 
 

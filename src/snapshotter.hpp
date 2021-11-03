@@ -30,7 +30,7 @@ public:
 
 private:
 
-    void topicCB(const ros::MessageEvent<ShapeShifterMsg const>& msg);
+    void topicCB(const ros::MessageEvent<ShapeShifterMsg>& msg);
 
 
     ros::NodeHandle& nh;

@@ -3,17 +3,20 @@
 
 namespace snapshotter
 {
-void RingBuffer::push(const ShapeShifterMsg& msg, const ros::Time& receiveTime)
+void RingBuffer::push(ShapeShifterMsg::ConstPtr msg, const ros::Time& receiveTime)
 {
-    const size_t entrySize = msg.objectSize() + sizeof(ros::Time);
+    const size_t entrySize = msg->objectSize() + sizeof(ros::Time);
+
+    std::scoped_lock lock(bufferLock);
+
     while(currentSize + entrySize > maxSize)
     {
-        currentSize -= buffer.front().msg.objectSize() + sizeof(ros::Time);
+        currentSize -= buffer.front().msg->objectSize() + sizeof(ros::Time);
         buffer.pop_front();
     }
     currentSize += entrySize;
     //TODO avoid the copy, replace with move
-    buffer.emplace_back(msg, receiveTime);
+    buffer.emplace_back(std::move(msg), receiveTime);
 }
 
 void RingBuffer::writeToBag(const std::string& filepath) const
@@ -26,8 +29,8 @@ void RingBuffer::writeToBag(const std::string& filepath) const
 
     for(const BufferEntry& entry : buffer)
     {
-        bag.write(entry.msg.getTopic(), entry.receiveTime, entry.msg,
-                  entry.msg.getConnectionHeader());
+        bag.write(entry.msg->getTopic(), entry.receiveTime, entry.msg,
+                  entry.msg->getConnectionHeader());
     }
     bag.close();
 }

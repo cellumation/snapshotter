@@ -24,7 +24,7 @@ void Snapshotter::subscribe(const std::string& topic)
         ops.queue_size = 50;
         ops.md5sum = ros::message_traits::md5sum<ShapeShifterMsg>();
         ops.datatype = ros::message_traits::datatype<ShapeShifterMsg>();
-        ops.helper = boost::make_shared<ros::SubscriptionCallbackHelperT<const ros::MessageEvent<ShapeShifterMsg const>&> >(
+        ops.helper = boost::make_shared<ros::SubscriptionCallbackHelperT<const ros::MessageEvent<ShapeShifterMsg>&> >(
                 boost::bind(&Snapshotter::topicCB, this, _1));
 
         subscribers.push_back(nh.subscribe(ops));
@@ -43,11 +43,11 @@ void Snapshotter::writeBagFile(const std::string& path)
     stopRecording = false;
 }
 
-void Snapshotter::topicCB(const ros::MessageEvent<ShapeShifterMsg const>& msg)
+void Snapshotter::topicCB(const ros::MessageEvent<ShapeShifterMsg>& msg)
 {
     if(!stopRecording)
     {
-        buffer.push(*msg.getConstMessage(), msg.getReceiptTime());
+        buffer.push(std::move(msg.getConstMessage()), msg.getReceiptTime());
     }
 }
 

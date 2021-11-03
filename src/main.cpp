@@ -10,7 +10,7 @@ int main(int argc, char **argv)
     ros::NodeHandle nh("~");
 
     Snapshotter::Config cfg;
-    cfg.maxMemoryBytes = 1 * 1024 * 1024 * 1024;
+    cfg.maxMemoryBytes = 1 * 1024 * 1024 * 1024; //TODO turn into parameter
     Snapshotter snapshotter(nh, cfg);
 
     boost::function<void (const ros::TimerEvent&)> subscribeTopics =
@@ -25,9 +25,8 @@ int main(int argc, char **argv)
             }
         }
     };
-    ros::Timer topicCheck = nh.createTimer(ros::Duration(2.0),subscribeTopics);
-
-
+    subscribeTopics(ros::TimerEvent{});
+    ros::Timer topicCheck = nh.createTimer(ros::Duration(2.0), subscribeTopics);
 
     boost::function<bool (snapshotter_2::TakeSnapshotRequest&,
                           snapshotter_2::TakeSnapshotResponse&)> takeSnapshotCb =
@@ -41,5 +40,8 @@ int main(int argc, char **argv)
     };
     auto serv = nh.advertiseService("take_snapshot",takeSnapshotCb);
 
-    ros::spin();
+    ros::MultiThreadedSpinner spinner(4); //TODO use num_threads parameter
+    spinner.spin();
+    return 0;
+
 }
