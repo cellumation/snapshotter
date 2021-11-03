@@ -38,7 +38,7 @@ private:
     std::vector<ros::Subscriber> subscribers;
     std::unordered_set<std::string> subscribedTopics;
     RingBuffer buffer;
-    bool stopRecording;/**if true no topics will be recorded */
+    bool stopRecording = false;/**if true no topics will be recorded */
 
 };
 
