@@ -23,7 +23,6 @@ public:
     typedef boost::shared_ptr<ShapeShifterMsg> Ptr;
     typedef boost::shared_ptr<ShapeShifterMsg const> ConstPtr;
 
-
     void setConnectionHeader(boost::shared_ptr<std::map<std::string, std::string>> header);
     const boost::shared_ptr<std::map<std::string, std::string>> getConnectionHeader() const;
 
@@ -47,9 +46,6 @@ public:
 
     /** Return the size that this object consumes in memory */
     size_t objectSize() const;
-
-    void setReceiptTime(const ros::Time& time);
-    const ros::Time& getReceiptTime() const;
 
 private:
 
