@@ -43,6 +43,8 @@ add_library(${PROJECT_NAME}
   src/ShapeShifterMsg.cpp
   src/RingBuffer.hpp
   src/RingBuffer.cpp
+  src/TopicFilter.cpp
+  src/TopicFilter.hpp
 )
 
 target_link_libraries(${PROJECT_NAME}

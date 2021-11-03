@@ -1,0 +1,6 @@
+<launch>
+  <node name="snapshotter_2" pkg="snapshotter_2" type="snapshotter_2_node" output="screen" respawn="true">
+        <rosparam command="load" file="$(find snapshotter_2)/config/example_config.yaml" />
+  </node>
+
+</launch>

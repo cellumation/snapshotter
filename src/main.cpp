@@ -1,6 +1,10 @@
 #include "ros/ros.h"
 #include "snapshotter.hpp"
+#include "TopicFilter.hpp"
 #include <snapshotter_2/TakeSnapshot.h>
+#include <cm_lib_ros/ParamHelper.hpp>
+#include <vector>
+#include <string>
 
 using namespace snapshotter;
 
@@ -9,19 +13,26 @@ int main(int argc, char **argv)
     ros::init(argc, argv, "snapshotter_test");
     ros::NodeHandle nh("~");
 
+    cm::ros::ParamHelper ph(nh);
+
+    TopicFilter topicFilter({ph.getParam<std::vector<std::string>>("exclude_topics")});
+
     Snapshotter::Config cfg;
-    cfg.maxMemoryBytes = 1 * 1024 * 1024 * 1024; //TODO turn into parameter
+    cfg.maxMemoryBytes = ph.getParam<uint32_t>("max_memory_mb") * 1024 * 1024;
     Snapshotter snapshotter(nh, cfg);
 
     boost::function<void (const ros::TimerEvent&)> subscribeTopics =
-    [&snapshotter] (const ros::TimerEvent&)
+    [&snapshotter, &topicFilter] (const ros::TimerEvent&)
     {
         ros::master::V_TopicInfo allTopics;
         if(ros::master::getTopics(allTopics))
         {
             for(const ros::master::TopicInfo& ti : allTopics)
             {
-                snapshotter.subscribe(ti.name);
+                if(!topicFilter.exclude(ti.name))
+                {
+                    snapshotter.subscribe(ti.name);
+                }
             }
         }
     };

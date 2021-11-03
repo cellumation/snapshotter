@@ -1,0 +1,4 @@
+max_memory_mb: 6000
+exclude_topics:
+  - /vision/camera_\d+/depth/.*
+  - /vision/camera_\d+/passenger_detection/debug.*
