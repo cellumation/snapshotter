@@ -1,3 +1,4 @@
+num_threads: 4
 max_memory_mb: 6000
 exclude_topics:
   - /vision/camera_\d+/depth/.*

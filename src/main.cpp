@@ -51,8 +51,7 @@ int main(int argc, char **argv)
     };
     auto serv = nh.advertiseService("take_snapshot",takeSnapshotCb);
 
-    ros::MultiThreadedSpinner spinner(4); //TODO use num_threads parameter
+    ros::MultiThreadedSpinner spinner(ph.getParam<uint32_t>("num_threads"));
     spinner.spin();
     return 0;
-
 }
