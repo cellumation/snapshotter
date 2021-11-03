@@ -1,12 +1,26 @@
 #include "ros/ros.h"
-#include "snapshotter.hpp"
+#include "Snapshotter.hpp"
 #include "TopicFilter.hpp"
+#include "RingBuffer.hpp"
 #include <snapshotter_2/TakeSnapshot.h>
 #include <cm_lib_ros/ParamHelper.hpp>
 #include <vector>
 #include <string>
 
 using namespace snapshotter;
+
+
+BagCompression getCompression(cm::ros::ParamHelper& ph)
+{
+    const std::string compression = ph.getParam<std::string>("bag_compression");
+    if(compression == "none")
+        return BagCompression::NONE;
+    if(compression == "slow")
+        return BagCompression::SLOW;
+    if(compression == "fast")
+        return BagCompression::FAST;
+    throw std::runtime_error("Parameter bag_compression has illegal value: '" + compression + "'");
+}
 
 int main(int argc, char **argv)
 {
@@ -36,16 +50,18 @@ int main(int argc, char **argv)
             }
         }
     };
+    //call once to immediately subscribe to all available topics
     subscribeTopics(ros::TimerEvent{});
     ros::Timer topicCheck = nh.createTimer(ros::Duration(2.0), subscribeTopics);
 
+    BagCompression compression = getCompression(ph);
     boost::function<bool (snapshotter_2::TakeSnapshotRequest&,
                           snapshotter_2::TakeSnapshotResponse&)> takeSnapshotCb =
-    [&snapshotter] (snapshotter_2::TakeSnapshotRequest& req,
-                    snapshotter_2::TakeSnapshotResponse& resp)
+    [&snapshotter, &compression] (snapshotter_2::TakeSnapshotRequest& req,
+                                  snapshotter_2::TakeSnapshotResponse& resp)
     {
         //TODO error handling!
-        snapshotter.writeBagFile(req.filename);
+        snapshotter.writeBagFile(req.filename, compression);
         resp.success = true;
         return true;
     };

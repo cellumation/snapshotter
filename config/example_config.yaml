@@ -1,5 +1,11 @@
 num_threads: 4
 max_memory_mb: 6000
+
+# allowed values for bag_compression are "none", "slow", "fast"
+# "none" = no compression, largest file size but very fast writing
+# "slow" = best compression, smallest file size but takes a lot of time to write
+# "fast" = some compression, medium file size but reasonably fast
+bag_compression: "fast"
 exclude_topics:
   - /vision/camera_\d+/depth/.*
   - /vision/camera_\d+/passenger_detection/debug.*

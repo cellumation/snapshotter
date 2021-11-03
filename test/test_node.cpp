@@ -7,7 +7,8 @@
 #include <rosbag/bag.h>
 #include <rosbag/view.h>
 #include <experimental/filesystem> //FIXME for gcc8 remove experimental
-#include "snapshotter.hpp"
+#include "Snapshotter.hpp"
+#include "Common.hpp"
 
 
 #define LOG_PATH "/tmp/snapshotter_2_tests"
@@ -52,7 +53,7 @@ struct DataPublisher
         pubTimer = nh.createTimer(ros::Duration(0.01), &DataPublisher::publish, this);
     }
 
-    void publish(const ros::TimerEvent& e)
+    void publish(const ros::TimerEvent& )
     {
         if(pubCount == 1000)
         {
@@ -138,7 +139,7 @@ TEST(TestSuite, SimpleTest)
     }
 
     const std::string file = std::string(LOG_PATH) + "/test1.bag";
-    snapshotter.writeBagFile(file);
+    snapshotter.writeBagFile(file, BagCompression::NONE);
     pub.checkBag(file);
 }
 

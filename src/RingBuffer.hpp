@@ -1,24 +1,34 @@
 #pragma once
 #include <deque>
-#include "ShapeShifterMsg.hpp"
 #include <ros/time.h>
 #include <mutex>
+#include "ShapeShifterMsg.hpp"
+#include "Common.hpp"
+
 
 namespace snapshotter
 {
 
-/** A naive implementation of a ringbuffer to be later replaced by something more efficient */
+/** A simple ring buffer to store ros messages*/
 class RingBuffer
 {
 public:
 
+    /** @param maxSize in bytes */
     RingBuffer(size_t maxSize) : maxSize(maxSize), currentSize(0) {}
 
+    /** Add a new message to the ring buffer.
+     *  If there is no space left the oldest message will be deleted.
+     *  is thread-safe */
     void push(ShapeShifterMsg::ConstPtr msg, const ros::Time& receiveTime);
 
-    /**writes the content of the buffer to a bag file */
-    void writeToBag(const std::string& path) const;
-    /**Removes all entries from this buffer */
+    /** Writes the content of the buffer to a bag file.
+     *  @throw BagWriteException in case of error
+     *  is thread-safe */
+    void writeToBag(const std::string& path, BagCompression compression) const;
+
+    /** Removes all entries from this buffer.
+     *  is thread-safe */
     void clear();
 
 private:
@@ -31,12 +41,10 @@ private:
             msg(std::move(msg)), receiveTime(receiveTime) {}
     };
 
-
-    size_t maxSize;
-    size_t currentSize;
+    size_t maxSize; //in bytes
+    size_t currentSize; //in bytes
     std::deque<BufferEntry> buffer;
-    std::mutex bufferLock;
+    mutable std::mutex bufferLock;
 };
 
-
-}
+} //end namespace

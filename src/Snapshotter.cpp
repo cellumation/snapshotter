@@ -1,4 +1,4 @@
-#include "snapshotter.hpp"
+#include "Snapshotter.hpp"
 
 
 using Subscriber = ros::Subscriber;
@@ -32,23 +32,25 @@ void Snapshotter::subscribe(const std::string& topic)
     }
 }
 
-void Snapshotter::writeBagFile(const std::string& path)
+void Snapshotter::writeBagFile(const std::string& path, BagCompression compression)
 {
-    //TODO check path etc.
-    stopRecording = true;
-    //TODO if multi threaded we need to wait for all write threads to end here
-    buffer.writeToBag(path);
+    /** Both writeToBag() and clear() are thread-safe.
+     *  I.e. all other threads will block in topicCB until writing has finished.
+     *  In theory a thread could sneak in between the two calls and add a few
+     *  messages to the buffer before clear() is called. But this doesn't really
+     *  matter.
+     *
+     * writeToBag() takes a long time to write the bag to disk. During that time
+     * the internal buffers of the subscribers will overflow and drop messages.
+     * I.e. there will be a gap in the data between two log files.
+     */
+    buffer.writeToBag(path, compression);
     buffer.clear();
-
-    stopRecording = false;
 }
 
 void Snapshotter::topicCB(const ros::MessageEvent<ShapeShifterMsg>& msg)
 {
-    if(!stopRecording)
-    {
-        buffer.push(std::move(msg.getConstMessage()), msg.getReceiptTime());
-    }
+    buffer.push(std::move(msg.getConstMessage()), msg.getReceiptTime());
 }
 
 }//end namespace

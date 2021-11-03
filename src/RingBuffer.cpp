@@ -15,28 +15,55 @@ void RingBuffer::push(ShapeShifterMsg::ConstPtr msg, const ros::Time& receiveTim
         buffer.pop_front();
     }
     currentSize += entrySize;
-    //TODO avoid the copy, replace with move
     buffer.emplace_back(std::move(msg), receiveTime);
 }
 
-void RingBuffer::writeToBag(const std::string& filepath) const
+void RingBuffer::writeToBag(const std::string& filepath,
+                            BagCompression compression) const
 {
+    //the buffer should not be modified while writing
+    std::scoped_lock lock(bufferLock);
+
     using namespace rosbag;
     Bag bag;
-    //TODO  compression parameter
-    // bag.setCompression(CompressionType::BZ2);
-    bag.open(filepath, bagmode::Write); //TODO catch exceptions etc.
 
-    for(const BufferEntry& entry : buffer)
+    switch(compression)
     {
-        bag.write(entry.msg->getTopic(), entry.receiveTime, entry.msg,
-                  entry.msg->getConnectionHeader());
+    case BagCompression::FAST:
+        bag.setCompression(CompressionType::LZ4);
+        break;
+    case BagCompression::SLOW:
+        bag.setCompression(CompressionType::BZ2);
+        break;
+    case BagCompression::NONE:
+        break;
+    default:
+        throw BagWriteException("Unhandled enum value");
     }
-    bag.close();
+
+    try
+    {
+        bag.open(filepath, bagmode::Write);
+        for(const BufferEntry& entry : buffer)
+        {
+            bag.write(entry.msg->getTopic(), entry.receiveTime, entry.msg,
+                    entry.msg->getConnectionHeader());
+        }
+        bag.close();
+    }
+    catch(const std::exception& ex)
+    {
+        throw BagWriteException(ex.what());
+    }
+    catch(...) //we really really don't want to crash :D
+    {
+        throw BagWriteException("unknown error");
+    }
 }
 
 void RingBuffer::clear()
 {
+    std::scoped_lock lock(bufferLock); //nobody should write to the buffer while clearing
     buffer.clear();
     currentSize = 0;
 }

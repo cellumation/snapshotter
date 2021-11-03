@@ -5,6 +5,7 @@
 #include <unordered_set>
 #include "ShapeShifterMsg.hpp"
 #include "RingBuffer.hpp"
+#include "Common.hpp"
 
 namespace snapshotter
 {
@@ -24,8 +25,8 @@ public:
     void subscribe(const std::string& topic);
 
     /**Stops recording, writes the bag and restarts recording
-     * @throw std::runtime_error on error     */
-    void writeBagFile(const std::string& path);
+     * @throw BagWriteException in case of error */
+    void writeBagFile(const std::string& path, BagCompression compression);
 
 
 private:
@@ -38,7 +39,6 @@ private:
     std::vector<ros::Subscriber> subscribers;
     std::unordered_set<std::string> subscribedTopics;
     RingBuffer buffer;
-    bool stopRecording = false;/**if true no topics will be recorded */
 
 };
 
