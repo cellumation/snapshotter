@@ -1,7 +1,6 @@
 #include "ros/ros.h"
 #include "Snapshotter.hpp"
 #include "TopicFilter.hpp"
-#include "RingBuffer.hpp"
 #include <snapshotter_2/TakeSnapshot.h>
 #include <cm_lib_ros/ParamHelper.hpp>
 #include <vector>

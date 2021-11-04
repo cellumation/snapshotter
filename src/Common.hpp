@@ -1,5 +1,7 @@
 #pragma once
 #include <stdexcept>
+#include "ShapeShifterMsg.hpp"
+
 namespace snapshotter
 {
     enum class BagCompression
@@ -12,6 +14,14 @@ namespace snapshotter
     struct BagWriteException : std::runtime_error
     {
         using std::runtime_error::runtime_error;
+    };
+
+    struct BufferEntry
+    {
+        ShapeShifterMsg::ConstPtr msg;
+        ros::Time receiveTime;
+        BufferEntry(ShapeShifterMsg::ConstPtr msg, const ros::Time& receiveTime) :
+            msg(std::move(msg)), receiveTime(receiveTime) {}
     };
 
 }

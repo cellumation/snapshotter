@@ -4,7 +4,8 @@
 #include <topic_tools/shape_shifter.h>
 #include <unordered_set>
 #include "ShapeShifterMsg.hpp"
-#include "RingBuffer.hpp"
+#include "MessageRingBuffer.hpp"
+#include "SingleMessageBuffer.hpp"
 #include "Common.hpp"
 
 namespace snapshotter
@@ -16,6 +17,9 @@ public:
     struct Config
     {
         size_t maxMemoryBytes;
+        /** If true the last message of each latched topic will be kept inside the buffer.
+         */
+        bool keepLatched;
     };
 
     Snapshotter(ros::NodeHandle& nh, const Config& cfg);
@@ -33,12 +37,16 @@ private:
 
     void topicCB(const ros::MessageEvent<ShapeShifterMsg>& msg);
 
+    /** is invoked every time a message is dropped from the MessageRingBuffer */
+    void messageDroppedFromBufferCB(BufferEntry&& entry);
 
     ros::NodeHandle& nh;
     Config cfg;
     std::vector<ros::Subscriber> subscribers;
     std::unordered_set<std::string> subscribedTopics;
-    RingBuffer buffer;
+    MessageRingBuffer buffer;
+    SingleMessageBuffer lastDroppedLatchedMsgs;
+
 
 };
 

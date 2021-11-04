@@ -27,6 +27,7 @@ public:
     const boost::shared_ptr<std::map<std::string, std::string>> getConnectionHeader() const;
 
 
+    /** the following getters use a map lookup internally.*/
     const std::string& getDataType() const;
     const std::string& getMD5Sum() const;
     const std::string& getMessageDefinition() const;
