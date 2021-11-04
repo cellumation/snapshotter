@@ -59,9 +59,22 @@ int main(int argc, char **argv)
     [&snapshotter, &compression] (snapshotter_2::TakeSnapshotRequest& req,
                                   snapshotter_2::TakeSnapshotResponse& resp)
     {
-        //TODO error handling!
-        snapshotter.writeBagFile(req.filename, compression);
-        resp.success = true;
+        try
+        {
+            snapshotter.writeBagFile(req.filename, compression);
+            resp.success = true;
+        }
+        catch(const std::exception& e)
+        {
+            resp.message = e.what();
+            resp.success = false;
+        }
+        catch(...)
+        {
+            resp.message = "unknown error";
+            resp.success = false;
+        }
+
         return true;
     };
     auto serv = nh.advertiseService("take_snapshot",takeSnapshotCb);
