@@ -41,7 +41,7 @@ void MessageRingBuffer::writeToBag(rosbag::Bag& bag) const
 void MessageRingBuffer::clear()
 {
     std::scoped_lock lock(bufferLock);
-    for(const BufferEntry& entry : buffer)
+    while(!buffer.empty())
     {
         droppedCb(std::move(buffer.front()));
         buffer.pop_front();
