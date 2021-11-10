@@ -10,7 +10,7 @@ void MessageRingBuffer::push(ShapeShifterMsg::ConstPtr msg, const ros::Time& rec
     {
         std::scoped_lock lock(bufferLock);
 
-        while(currentSize + entrySize > maxSize)
+        while(!buffer.empty() && currentSize + entrySize > maxSize)
         {
             //we accumulate all dropped messages to invoke the droppedCallback after unlocking.
             //The callback might take a long time and potentially lock other resources causing a deadlock
@@ -18,6 +18,13 @@ void MessageRingBuffer::push(ShapeShifterMsg::ConstPtr msg, const ros::Time& rec
             droppedMsgs.emplace_back(std::move(buffer.front()));
             buffer.pop_front();
         }
+
+        if(currentSize + entrySize > maxSize)
+        {
+            ROS_WARN_STREAM("Message from " << msg->getTopic() << " is too large for buffer");
+            return;
+        }
+
         currentSize += entrySize;
         buffer.emplace_back(std::move(msg), receiveTime);
     }
