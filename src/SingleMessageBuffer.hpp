@@ -16,8 +16,10 @@ class SingleMessageBuffer
 {
 public:
     /** Stores the given entry inside the buffer. Drops existing entry if necessary.
+     * @param keepNewer If true the existing entry will only be replaced if it is older than
+     *                  @p entry. Otherwise it will always be replaced.
      *  is thread-safe */
-    void push(BufferEntry&& entry);
+    void push(BufferEntry&& entry, bool keepNewer);
 
     /** Writes the content of the buffer to a bag file.
      *  @param rewriteTimestamp All messages will use this timestamp as receivedTime inside the bag

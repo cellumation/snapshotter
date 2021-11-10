@@ -107,7 +107,24 @@ void Snapshotter::messageDroppedFromBufferCB(BufferEntry&& entry)
     //NOTE getLatching call does a map lookup. if we need to call this more than once we should buffer
     if(entry.msg->getLatching())
     {
-        lastDroppedLatchedMsgs.push(std::move(entry));
+        /** In very rare cases newer messages might end up in the lastDroppedLatchedMsgs before older ones.
+         *  To avoid overwriting them we keep the newer one inside the buffer.
+         *
+         *  Newer messages may arrive here before older ones for several reasons:
+         *  (1) multiple messages of the same topic are dropped by seperate threads
+         *      at nearly the same time from the buffer. Depending on the scheduler those messages
+         *      may show up here in the wrong order.
+         *  (2) Multiple messages of the same topic arrived in the topicCb at the same time. Depending
+         *      on scheduling their order might have been inverted when pushing them to the buffer.
+         *  (3) Multiple messages on the same topic originating from different publishers arrive in the
+         *      wrong order due to network latency.
+         *
+         *  Handling all those cases correctly would require a far more complex design of the snapshotter.
+         *  I am unwilling to increase design complexity to handle those rare corner cases.
+         *  Instead we simply keep the newer of two entries in the lastDroppedLatchedMsgs. This should
+         *  catch most of the cases (that where already very rare to begin with). This is good enough.
+        **/
+        lastDroppedLatchedMsgs.push(std::move(entry), true);
     }
 }
 
