@@ -6,8 +6,6 @@
   <maintainer email="a.boeckmann@cellumation.com">arne</maintainer>
   <license>BSD</license>
   <buildtool_depend>catkin</buildtool_depend>
-  <depend>cm_interfaces</depend>
-  <depend>cm_lib</depend>
   <depend>rosbag</depend>
   <depend>rosbag_storage</depend>
   <depend>roscpp</depend>
