@@ -1,3 +1,0 @@
-<launch>
-  <test test-name="test_snapshotter" pkg="snapshotter_2" type="utest" />
-</launch>

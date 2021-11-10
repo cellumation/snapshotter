@@ -1,16 +1,17 @@
 cmake_minimum_required(VERSION 3.10)
 project(snapshotter_2)
 
+# SET(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-O0 -g") # set here so that -DNDEBUG is removed and thus asserts are active.
+
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS ON)
+
 
 add_compile_options(-Wall -Wextra -Werror)
 
 set(catkinDependencies
     boost_sml_ros
-    cm_interfaces
-    cm_lib
     rosbag
     rosbag_storage
     roscpp
@@ -88,7 +89,7 @@ install(DIRECTORY launch/
 find_package(rostest REQUIRED)
 find_package(gtest)
 
-catkin_add_gtest(utest test/launch_test.test test/test_node.cpp)
+catkin_add_gtest(utest test/test.test test/test_node.cpp)
 target_link_libraries(utest
     ${catkin_LIBRARIES}
     ${Boost_LIBRARIES}
