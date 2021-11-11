@@ -31,7 +31,9 @@ int main(int argc, char **argv)
     TopicFilter topicFilter({ph.getParam<std::vector<std::string>>("exclude_topics")});
 
     Snapshotter::Config cfg;
-    cfg.maxMemoryBytes = size_t(ph.getParam<uint32_t>("max_memory_mb")) * size_t(1024 * 1024;
+    cfg.maxMemoryBytes = size_t(ph.getParam<uint32_t>("max_memory_mb")) * size_t(1024 * 1024);
+    ROS_INFO_STREAM("Memory limit: " << cfg.maxMemoryBytes << " byte");
+    ROS_INFO_STREAM("param is " << ph.getParam<uint32_t>("max_memory_mb") << " mb");
     Snapshotter snapshotter(nh, cfg);
 
     boost::function<void (const ros::TimerEvent&)> subscribeTopics =
