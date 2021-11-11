@@ -5,6 +5,7 @@
 #include <cm_lib_ros/ParamHelper.hpp>
 #include <vector>
 #include <string>
+#include <mutex>
 
 using namespace snapshotter;
 
@@ -54,11 +55,22 @@ int main(int argc, char **argv)
     ros::Timer topicCheck = nh.createTimer(ros::Duration(2.0), subscribeTopics);
 
     BagCompression compression = getCompression(ph);
+
+    std::mutex takeSnapshotServiceLock;
+
     boost::function<bool (snapshotter_2::TakeSnapshotRequest&,
                           snapshotter_2::TakeSnapshotResponse&)> takeSnapshotCb =
-    [&snapshotter, &compression] (snapshotter_2::TakeSnapshotRequest& req,
-                                  snapshotter_2::TakeSnapshotResponse& resp)
+    [&] (snapshotter_2::TakeSnapshotRequest& req,
+         snapshotter_2::TakeSnapshotResponse& resp)
     {
+        std::unique_lock<std::mutex> lock(takeSnapshotServiceLock, std::try_to_lock);
+        if(!lock.owns_lock()){
+            // mutex wasn't locked. Handle it.
+            resp.success = false;
+            resp.message = "Already taking a snapshot.";
+            return true;
+        }
+
         try
         {
             snapshotter.writeBagFile(req.filename, compression);
