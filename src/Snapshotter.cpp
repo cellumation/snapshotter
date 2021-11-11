@@ -53,27 +53,19 @@ void Snapshotter::writeBagFile(const std::string& path, BagCompression compressi
 
     try
     {
-        /** Both writeToBag() and clear() are thread-safe.
-         *  In theory a thread could sneak in between the two calls and add a few
-         *  messages to the buffer before clear() is called. But this doesn't really
-         *  matter.
-         *
-         * writeToBag() takes a long time to write the bag to disk. During that time
-         * the internal buffers of the subscribers will overflow and drop messages.
-         * I.e. there will be a gap in the data between two log files.
-         */
+        /** Both writeToBag() and clear() are thread-safe and will block for a short time
+         *  while the internal buffers are copied. The actual writing does not block.
+         *  Normal operation will continue and we will not lose any data.         */
 
         bag.open(path, bagmode::Write);
 
-        //write all old latched messages 3 seconds before the actual log starts.
-        //The 3 is arbitrary. The idea is to make the old latched messages stand out
-        //to a human reader when looking at the bag.
+        /** write all old latched messages 3 seconds before the actual log starts.
+         *  The value 3 is arbitrary. The idea is to make the old latched messages stand out
+         *  to a human reader when looking at the bag. */
         const ros::Time latchedTime = buffer.getOldestReceiveTime() - ros::Duration(3);
         lastDroppedLatchedMsgs.writeToBag(bag, latchedTime);
 
         buffer.writeToBag(bag);
-        buffer.clear();//this triggers the messageDroppedFromBufferCB() which in turn will modify lastDroppedLatchedMsgs
-
         bag.close();
     }
     catch(const std::exception& ex)

@@ -37,8 +37,15 @@ void MessageRingBuffer::push(ShapeShifterMsg::ConstPtr msg, const ros::Time& rec
 
 void MessageRingBuffer::writeToBag(rosbag::Bag& bag) const
 {
-    std::scoped_lock lock(bufferLock);
-    for(const BufferEntry& entry : buffer)
+    std::deque<BufferEntry> bufferCopy;
+    {
+        std::scoped_lock lock(bufferLock);
+        // std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
+        bufferCopy = buffer;
+        // std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
+    }
+
+    for(const BufferEntry& entry : bufferCopy)
     {
         bag.write(entry.msg->getTopic(), entry.receiveTime, entry.msg,
                 entry.msg->getConnectionHeader());

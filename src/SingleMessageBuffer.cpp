@@ -31,8 +31,13 @@ void SingleMessageBuffer::push(BufferEntry&& entry, bool keepNewer)
 
 void SingleMessageBuffer::writeToBag(rosbag::Bag& bag, const ros::Time& rewriteTimestamp) const
 {
-    std::scoped_lock lock(messagesLock);
-    for(auto& [topic, message] : messages)
+    std::unordered_map<TopicName, BufferEntry> messageCopy;
+    {
+        std::scoped_lock lock(messagesLock);
+        messageCopy = messages;
+    }
+
+    for(auto& [topic, message] : messageCopy)
     {
         bag.write(topic, rewriteTimestamp, message.msg,
                 message.msg->getConnectionHeader());

@@ -18,6 +18,13 @@ namespace snapshotter
 
     struct BufferEntry
     {
+        /**ATTENTION The BufferEntries are copied when writting to the file.
+         *           This becomes a problem when the BufferEntry grows in size.
+         *           Currently this is fine because it only contains a pointer and two ints.
+         *           DO NOT ADD MORE ATTRIBUTES! (or if you do, rethink how data is written
+         *           to the bag file) */
+
+
         ShapeShifterMsg::ConstPtr msg;
         ros::Time receiveTime;
         BufferEntry(ShapeShifterMsg::ConstPtr msg, const ros::Time& receiveTime) :
