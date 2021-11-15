@@ -7,6 +7,7 @@
 #include "MessageRingBuffer.hpp"
 #include "SingleMessageBuffer.hpp"
 #include "Common.hpp"
+#include <shared_mutex>
 
 namespace snapshotter
 {
@@ -46,6 +47,7 @@ private:
     std::unordered_set<std::string> subscribedTopics;
     MessageRingBuffer buffer;
     SingleMessageBuffer lastDroppedLatchedMsgs;
+    std::shared_mutex writeBagLock;
 
 
 };

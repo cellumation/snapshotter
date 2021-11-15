@@ -3,9 +3,31 @@
 
 namespace snapshotter
 {
+
+MessageRingBuffer::MessageRingBuffer(const MessageRingBuffer& other)
+{
+    std::scoped_lock lock(other.bufferLock);
+    maxSize = other.maxSize;
+    currentSize = other.currentSize;
+    buffer = other.buffer;
+    droppedCb = other.droppedCb;
+}
+
+void MessageRingBuffer::setDroppedCb(std::function<void(BufferEntry&&)> cb)
+{
+    droppedCb = cb;
+}
+
 void MessageRingBuffer::push(ShapeShifterMsg::ConstPtr msg, const ros::Time& receiveTime)
 {
     const size_t entrySize = msg->objectSize() + sizeof(ros::Time);
+
+    if(entrySize > maxSize)
+    {
+        ROS_WARN_STREAM("Message from " << msg->getTopic() << " is too large for buffer. Ignoring message");
+        return;
+    }
+
     std::vector<BufferEntry> droppedMsgs;
     {
         std::scoped_lock lock(bufferLock);
@@ -18,15 +40,15 @@ void MessageRingBuffer::push(ShapeShifterMsg::ConstPtr msg, const ros::Time& rec
             droppedMsgs.emplace_back(std::move(buffer.front()));
             buffer.pop_front();
         }
-
-        if(currentSize + entrySize > maxSize)
+        if(currentSize + entrySize <= maxSize)
         {
-            ROS_WARN_STREAM("Message from " << msg->getTopic() << " is too large for buffer");
-            return;
+            currentSize += entrySize;
+            buffer.emplace_back(std::move(msg), receiveTime);
         }
-
-        currentSize += entrySize;
-        buffer.emplace_back(std::move(msg), receiveTime);
+        else
+        {
+            ROS_ERROR_STREAM("Message from " << msg->getTopic() << " is too large for buffer");
+        }
     }
 
     for(BufferEntry& e : droppedMsgs)
@@ -37,15 +59,8 @@ void MessageRingBuffer::push(ShapeShifterMsg::ConstPtr msg, const ros::Time& rec
 
 void MessageRingBuffer::writeToBag(rosbag::Bag& bag) const
 {
-    std::deque<BufferEntry> bufferCopy;
-    {
-        std::scoped_lock lock(bufferLock);
-        // std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
-        bufferCopy = buffer;
-        // std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
-    }
-
-    for(const BufferEntry& entry : bufferCopy)
+    std::scoped_lock lock(bufferLock);
+    for(const BufferEntry& entry : buffer)
     {
         bag.write(entry.msg->getTopic(), entry.receiveTime, entry.msg,
                 entry.msg->getConnectionHeader());

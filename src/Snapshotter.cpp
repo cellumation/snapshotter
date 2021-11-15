@@ -53,19 +53,28 @@ void Snapshotter::writeBagFile(const std::string& path, BagCompression compressi
 
     try
     {
-        /** Both writeToBag() and clear() are thread-safe and will block for a short time
-         *  while the internal buffers are copied. The actual writing does not block.
-         *  Normal operation will continue and we will not lose any data.         */
+        std::unique_ptr<MessageRingBuffer> bufferCopy;
+        std::unique_ptr<SingleMessageBuffer> latchedBufferCopy;
+        {
+            //wait until all threads have stopped writing to the buffers,
+            //then copy both buffers
+            std::unique_lock lock(writeBagLock);
+            bufferCopy.reset(new MessageRingBuffer(buffer));
+            latchedBufferCopy.reset(new SingleMessageBuffer(lastDroppedLatchedMsgs));
+        }
+
+        //replace the dropped-callback of the copied buffer. Otherwise dropped messages
+        //from that buffer would end up in the original lastDroppedLatchedMsgs buffer.
+        bufferCopy->setDroppedCb([](BufferEntry&&){});
 
         bag.open(path, bagmode::Write);
-
         /** write all old latched messages 3 seconds before the actual log starts.
          *  The value 3 is arbitrary. The idea is to make the old latched messages stand out
          *  to a human reader when looking at the bag. */
-        const ros::Time latchedTime = buffer.getOldestReceiveTime() - ros::Duration(3);
-        lastDroppedLatchedMsgs.writeToBag(bag, latchedTime);
+        const ros::Time latchedTime = bufferCopy->getOldestReceiveTime() - ros::Duration(3);
+        latchedBufferCopy->writeToBag(bag, latchedTime);
 
-        buffer.writeToBag(bag);
+        bufferCopy->writeToBag(bag);
         bag.close();
     }
     catch(const std::exception& ex)
@@ -80,6 +89,10 @@ void Snapshotter::writeBagFile(const std::string& path, BagCompression compressi
 
 void Snapshotter::topicCB(const ros::MessageEvent<ShapeShifterMsg>& msg)
 {
+    //multiple threads may work on the buffer at the same time
+    //as long as no thread is trying to write the buffer to disk
+    std::shared_lock lock(writeBagLock);
+
     buffer.push(std::move(msg.getConstMessage()), msg.getReceiptTime());
 }
 

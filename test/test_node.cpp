@@ -252,6 +252,7 @@ TEST(TestSuite, DropAllMsgs)
 
     DataPublisher pub(*handle);
     Snapshotter::Config cfg;
+    cfg.keepLatched = true;
     cfg.maxMemoryBytes = 0;
     Snapshotter snapshotter(*handle, cfg);
     snapshotter.subscribe("test_bool");
@@ -283,6 +284,7 @@ TEST(TestSuite, DropSomeMsgs)
 
     Snapshotter::Config cfg;
     cfg.maxMemoryBytes = 5000;
+    cfg.keepLatched = false;
     Snapshotter snapshotter(*handle, cfg);
     snapshotter.subscribe("test_bool");
     snapshotter.subscribe("test_float");
@@ -311,6 +313,7 @@ TEST(TestSuite, DropSomeMsgs)
     pub.checkBoolMsgs(file, true);
     pub.checkFloatMsgs(file, true);
 
+
     clearLogFolder();
 }
 
@@ -323,6 +326,7 @@ TEST(TestSuite, Latched)
 
     Snapshotter::Config cfg;
     cfg.maxMemoryBytes = 3000;
+    cfg.keepLatched = true;
     Snapshotter snapshotter(*handle, cfg);
     snapshotter.subscribe("test_bool");
     snapshotter.subscribe("test_float");
@@ -342,7 +346,7 @@ TEST(TestSuite, Latched)
     latchedMsg.data = 42;
     latchedPub.publish(latchedMsg);
 
-    //spam the snapshotter with data until we are shure that the latched message would have been dropped
+    //spam the snapshotter with data until we are sure that the latched message would have been dropped
     //if it would not have been latched
     pub.run();
 
