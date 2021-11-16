@@ -1,17 +1,13 @@
 cmake_minimum_required(VERSION 3.10)
 project(snapshotter)
 
-# SET(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-O0 -g") # set here so that -DNDEBUG is removed and thus asserts are active.
-
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS ON)
 
-
 add_compile_options(-Wall -Wextra -Werror)
 
 set(catkinDependencies
-    boost_sml_ros
     rosbag
     rosbag_storage
     roscpp
@@ -21,10 +17,8 @@ set(catkinDependencies
 
 find_package(catkin REQUIRED COMPONENTS ${catkinDependencies} message_generation)
 
-find_package(Boost REQUIRED COMPONENTS program_options system)
+find_package(Boost REQUIRED COMPONENTS system)
 
-
-# add_message_files(DIRECTORY msg FILES SnapshotStatus.msg)
 add_service_files(DIRECTORY srv FILES TakeSnapshot.srv)
 
 generate_messages(DEPENDENCIES rosgraph_msgs std_msgs)
@@ -80,8 +74,6 @@ install(TARGETS ${PROJECT_NAME}
 
 install(DIRECTORY launch/
   DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}/launch)
-
-# catkin_install_python(PROGRAMS scripts/trigger_snapshot.py DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION})
 
 #############
 ## Testing ##
