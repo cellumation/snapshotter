@@ -4,7 +4,7 @@
   <version>1.0.0</version>
   <description>A complete rewrite of the snapshotter</description>
   <maintainer email="a.boeckmann@cellumation.com">Arne</maintainer>
-  <license>BSD</license>
+  <license>BSD-3-Clause</license>
   <buildtool_depend>catkin</buildtool_depend>
   <depend>rosbag</depend>
   <depend>rosbag_storage</depend>
