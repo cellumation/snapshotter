@@ -1,4 +1,5 @@
 num_threads: 4
+
 # Maximum memory to be used for buffering by the snapshotter (in mb)
 # The snapshotter will take at least max_memory_mb of additional
 # memory while writing a snapshot to disk!
@@ -9,6 +10,9 @@ max_memory_mb: 5000
 # "slow" = best compression, smallest file size but takes a lot of time to write
 # "fast" = some compression, medium file size but reasonably fast
 bag_compression: "fast"
+
+# A list of regexes that should be excluded from logging. Every topic that
+# matches a regex in this list is not logged.
 exclude_topics:
   - /vision/camera_\d+/depth/.*
   - /vision/camera_\d+/passenger_detection/debug.*
