@@ -6,6 +6,36 @@ This is a powerful tool for post mortem analysis, debugging and testing of large
 The idea of the snapshotter was taken from rosbag_snapshot (https://github.com/ros/rosbag_snapshot).
 Initially we maintained a fork of rosbag_snapshot but we forked at such an early time and digressed so far away from the original that there was no chance of ever merhing back. Over time our fork became hard to manage and messy thus we eventually decided on a complete re-implementation that contains only the features that we need.
 
+## Usage
+### Launching
+An example launch file and configuration are provided. The configuration is located in the config folder.
+```
+roslaunch snapshotter example.launch
+```
+
+### Parameters
+```
+num_threads: 4
+
+# Maximum memory to be used for buffering by the snapshotter (in mb)
+# The snapshotter will take at least max_memory_mb of additional
+# memory while writing a snapshot to disk!
+max_memory_mb: 5000
+
+# allowed values for bag_compression are "none", "slow", "fast"
+# "none" = no compression, largest file size but very fast writing
+# "slow" = best compression, smallest file size but takes a lot of time to write
+# "fast" = some compression, medium file size but reasonably fast
+bag_compression: "fast"
+
+# A list of regexes that should be excluded from logging. Every topic that
+# matches a regex in this list is not logged.
+exclude_topics:
+  - /vision/camera_\d+/depth/.*
+  - /vision/camera_\d+/passenger_detection/debug.*
+
+```
+
 ## Features
 - Very little memory overhead. (10GB of ram usage result in a 9.8gb bag file)
 - Automatically subscribes to new topics as they become available
