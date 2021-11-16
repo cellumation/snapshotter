@@ -35,7 +35,6 @@
 #include "Snapshotter.hpp"
 #include "TopicFilter.hpp"
 #include <snapshotter/TakeSnapshot.h>
-#include <cm_lib_ros/ParamHelper.hpp>
 #include <vector>
 #include <string>
 #include <mutex>
@@ -43,9 +42,14 @@
 using namespace snapshotter;
 
 
-BagCompression getCompression(cm::ros::ParamHelper& ph)
+BagCompression getCompression(ros::NodeHandle & nh)
 {
-    const std::string compression = ph.getParam<std::string>("bag_compression");
+    std::string compression;
+    if(!nh.getParam("bag_compression", compression))
+    {
+        throw std::runtime_error("Parameter 'bag_compression' missing");
+    }
+
     if(compression == "none")
         return BagCompression::NONE;
     if(compression == "slow")
@@ -60,12 +64,22 @@ int main(int argc, char **argv)
     ros::init(argc, argv, "snapshotter_test");
     ros::NodeHandle nh("~");
 
-    cm::ros::ParamHelper ph(nh);
-
-    TopicFilter topicFilter({ph.getParam<std::vector<std::string>>("exclude_topics")});
+    std::vector<std::string> excludeRegexes;
+    if(!nh.getParam("exclude_topics", excludeRegexes))
+    {
+        throw std::runtime_error("Parameter 'exclude_topics' missing");
+    }
+    TopicFilter topicFilter({excludeRegexes});
 
     Snapshotter::Config cfg;
-    cfg.maxMemoryBytes = size_t(ph.getParam<uint32_t>("max_memory_mb")) * size_t(1024 * 1024);
+
+    int maxMemoryMb = 0;
+    if(!nh.getParam("max_memory_mb", maxMemoryMb))
+    {
+        throw std::runtime_error("Parameter 'max_memory_mb' missing");
+    }
+    cfg.maxMemoryBytes = size_t(maxMemoryMb) * size_t(1024 * 1024);
+
     Snapshotter snapshotter(nh, cfg);
 
     boost::function<void (const ros::TimerEvent&)> subscribeTopics =
@@ -87,7 +101,7 @@ int main(int argc, char **argv)
     subscribeTopics(ros::TimerEvent{});
     ros::Timer topicCheck = nh.createTimer(ros::Duration(2.0), subscribeTopics);
 
-    BagCompression compression = getCompression(ph);
+    BagCompression compression = getCompression(nh);
 
     std::mutex takeSnapshotServiceLock;
 
@@ -124,7 +138,18 @@ int main(int argc, char **argv)
     };
     auto serv = nh.advertiseService("take_snapshot",takeSnapshotCb);
 
-    ros::MultiThreadedSpinner spinner(ph.getParam<uint32_t>("num_threads"));
+    int numThreads = 1;
+    if(!nh.getParam("num_threads", numThreads))
+    {
+        throw std::runtime_error("Parameter 'num_threads' missing");
+    }
+
+    if(numThreads <= 0)
+    {
+        throw std::runtime_error("Parameter 'num_threads' needs to be >= 1");
+    }
+
+    ros::MultiThreadedSpinner spinner(numThreads);
     spinner.spin();
     return 0;
 }
