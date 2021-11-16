@@ -1,5 +1,5 @@
 <launch>
   <!-- <test test-name="test_snapshotter" pkg="snapshotter_2" type="utest"  launch-prefix="gdbserver localhost:2345" /> -->
 
-  <test test-name="test_snapshotter" pkg="snapshotter_2" type="utest" />
+  <test test-name="test_snapshotter" pkg="snapshotter" type="utest" />
 </launch>
