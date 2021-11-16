@@ -12,7 +12,7 @@
 #include "Common.hpp"
 
 
-#define LOG_PATH "/tmp/snapshotter_2_tests"
+#define LOG_PATH "/tmp/snapshotter_tests"
 
 namespace fs = std::filesystem;
 using namespace snapshotter;
