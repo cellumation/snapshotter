@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.10)
-project(snapshotter_2)
+project(snapshotter)
 
 # SET(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-O0 -g") # set here so that -DNDEBUG is removed and thus asserts are active.
 

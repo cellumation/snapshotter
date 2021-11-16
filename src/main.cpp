@@ -34,7 +34,7 @@
 #include "ros/ros.h"
 #include "Snapshotter.hpp"
 #include "TopicFilter.hpp"
-#include <snapshotter_2/TakeSnapshot.h>
+#include <snapshotter/TakeSnapshot.h>
 #include <cm_lib_ros/ParamHelper.hpp>
 #include <vector>
 #include <string>
@@ -91,10 +91,10 @@ int main(int argc, char **argv)
 
     std::mutex takeSnapshotServiceLock;
 
-    boost::function<bool (snapshotter_2::TakeSnapshotRequest&,
-                          snapshotter_2::TakeSnapshotResponse&)> takeSnapshotCb =
-    [&] (snapshotter_2::TakeSnapshotRequest& req,
-         snapshotter_2::TakeSnapshotResponse& resp)
+    boost::function<bool (snapshotter::TakeSnapshotRequest&,
+                          snapshotter::TakeSnapshotResponse&)> takeSnapshotCb =
+    [&] (snapshotter::TakeSnapshotRequest& req,
+         snapshotter::TakeSnapshotResponse& resp)
     {
         std::unique_lock<std::mutex> lock(takeSnapshotServiceLock, std::try_to_lock);
         if(!lock.owns_lock()){

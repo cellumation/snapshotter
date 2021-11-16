@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
 <package format="2">
-  <name>snapshotter_2</name>
+  <name>snapshotter</name>
   <version>1.0.0</version>
   <description>A complete rewrite of the snapshotter</description>
   <maintainer email="a.boeckmann@cellumation.com">Arne</maintainer>
