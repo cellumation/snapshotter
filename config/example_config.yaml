@@ -1,5 +1,8 @@
 num_threads: 4
-max_memory_mb: 1000
+# Maximum memory to be used for buffering by the snapshotter (in mb)
+# The snapshotter will take at least max_memory_mb of additional
+# memory while writing a snapshot to disk!
+max_memory_mb: 5000
 
 # allowed values for bag_compression are "none", "slow", "fast"
 # "none" = no compression, largest file size but very fast writing

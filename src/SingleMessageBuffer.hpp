@@ -15,6 +15,9 @@ namespace snapshotter
 class SingleMessageBuffer
 {
 public:
+    SingleMessageBuffer() = default;
+    SingleMessageBuffer(const SingleMessageBuffer& other);
+
     /** Stores the given entry inside the buffer. Drops existing entry if necessary.
      * @param keepNewer If true the existing entry will only be replaced if it is older than
      *                  @p entry. Otherwise it will always be replaced.

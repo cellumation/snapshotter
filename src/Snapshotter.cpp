@@ -53,27 +53,28 @@ void Snapshotter::writeBagFile(const std::string& path, BagCompression compressi
 
     try
     {
-        /** Both writeToBag() and clear() are thread-safe.
-         *  In theory a thread could sneak in between the two calls and add a few
-         *  messages to the buffer before clear() is called. But this doesn't really
-         *  matter.
-         *
-         * writeToBag() takes a long time to write the bag to disk. During that time
-         * the internal buffers of the subscribers will overflow and drop messages.
-         * I.e. there will be a gap in the data between two log files.
-         */
+        std::unique_ptr<MessageRingBuffer> bufferCopy;
+        std::unique_ptr<SingleMessageBuffer> latchedBufferCopy;
+        {
+            //wait until all threads have stopped writing to the buffers,
+            //then copy both buffers
+            std::unique_lock lock(writeBagLock);
+            bufferCopy.reset(new MessageRingBuffer(buffer));
+            latchedBufferCopy.reset(new SingleMessageBuffer(lastDroppedLatchedMsgs));
+        }
+
+        //replace the dropped-callback of the copied buffer. Otherwise dropped messages
+        //from that buffer would end up in the original lastDroppedLatchedMsgs buffer.
+        bufferCopy->setDroppedCb([](BufferEntry&&){});
 
         bag.open(path, bagmode::Write);
+        /** write all old latched messages 3 seconds before the actual log starts.
+         *  The value 3 is arbitrary. The idea is to make the old latched messages stand out
+         *  to a human reader when looking at the bag. */
+        const ros::Time latchedTime = bufferCopy->getOldestReceiveTime() - ros::Duration(3);
+        latchedBufferCopy->writeToBag(bag, latchedTime);
 
-        //write all old latched messages 3 seconds before the actual log starts.
-        //The 3 is arbitrary. The idea is to make the old latched messages stand out
-        //to a human reader when looking at the bag.
-        const ros::Time latchedTime = buffer.getOldestReceiveTime() - ros::Duration(3);
-        lastDroppedLatchedMsgs.writeToBag(bag, latchedTime);
-
-        buffer.writeToBag(bag);
-        buffer.clear();//this triggers the messageDroppedFromBufferCB() which in turn will modify lastDroppedLatchedMsgs
-
+        bufferCopy->writeToBag(bag);
         bag.close();
     }
     catch(const std::exception& ex)
@@ -88,6 +89,10 @@ void Snapshotter::writeBagFile(const std::string& path, BagCompression compressi
 
 void Snapshotter::topicCB(const ros::MessageEvent<ShapeShifterMsg>& msg)
 {
+    //multiple threads may work on the buffer at the same time
+    //as long as no thread is trying to write the buffer to disk
+    std::shared_lock lock(writeBagLock);
+
     buffer.push(std::move(msg.getConstMessage()), msg.getReceiptTime());
 }
 

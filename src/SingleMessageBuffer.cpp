@@ -4,6 +4,12 @@
 namespace snapshotter
 {
 
+SingleMessageBuffer::SingleMessageBuffer(const SingleMessageBuffer& other)
+{
+    std::scoped_lock lock(other.messagesLock);
+    messages = other.messages;
+}
+
 void SingleMessageBuffer::push(BufferEntry&& entry, bool keepNewer)
 {
     const TopicName topic = entry.msg->getTopic(); //buffer because getTopic does map lookup
@@ -32,6 +38,7 @@ void SingleMessageBuffer::push(BufferEntry&& entry, bool keepNewer)
 void SingleMessageBuffer::writeToBag(rosbag::Bag& bag, const ros::Time& rewriteTimestamp) const
 {
     std::scoped_lock lock(messagesLock);
+
     for(auto& [topic, message] : messages)
     {
         bag.write(topic, rewriteTimestamp, message.msg,

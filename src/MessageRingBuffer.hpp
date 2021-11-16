@@ -28,6 +28,8 @@ public:
     MessageRingBuffer(size_t maxSize, std::function<void(BufferEntry&&)> droppedCb) :
         maxSize(maxSize), droppedCb(droppedCb), currentSize(0) {}
 
+    MessageRingBuffer(const MessageRingBuffer& other);
+
     /** Add a new message to the ring buffer.
      *  If there is no space left the oldest message will be deleted.
      *  is thread-safe */
@@ -45,6 +47,8 @@ public:
     /** Returns the oldest received-timestamp currently present in the buffer.
      *  is thread-safe */
     ros::Time getOldestReceiveTime() const;
+
+    void setDroppedCb(std::function<void(BufferEntry&&)> cb);
 
 private:
 

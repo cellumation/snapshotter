@@ -3,9 +3,31 @@
 
 namespace snapshotter
 {
+
+MessageRingBuffer::MessageRingBuffer(const MessageRingBuffer& other)
+{
+    std::scoped_lock lock(other.bufferLock);
+    maxSize = other.maxSize;
+    currentSize = other.currentSize;
+    buffer = other.buffer;
+    droppedCb = other.droppedCb;
+}
+
+void MessageRingBuffer::setDroppedCb(std::function<void(BufferEntry&&)> cb)
+{
+    droppedCb = cb;
+}
+
 void MessageRingBuffer::push(ShapeShifterMsg::ConstPtr msg, const ros::Time& receiveTime)
 {
     const size_t entrySize = msg->objectSize() + sizeof(ros::Time);
+
+    if(entrySize > maxSize)
+    {
+        ROS_WARN_STREAM("Message from " << msg->getTopic() << " is too large for buffer. Ignoring message");
+        return;
+    }
+
     std::vector<BufferEntry> droppedMsgs;
     {
         std::scoped_lock lock(bufferLock);
@@ -18,15 +40,15 @@ void MessageRingBuffer::push(ShapeShifterMsg::ConstPtr msg, const ros::Time& rec
             droppedMsgs.emplace_back(std::move(buffer.front()));
             buffer.pop_front();
         }
-
-        if(currentSize + entrySize > maxSize)
+        if(currentSize + entrySize <= maxSize)
         {
-            ROS_WARN_STREAM("Message from " << msg->getTopic() << " is too large for buffer");
-            return;
+            currentSize += entrySize;
+            buffer.emplace_back(std::move(msg), receiveTime);
         }
-
-        currentSize += entrySize;
-        buffer.emplace_back(std::move(msg), receiveTime);
+        else
+        {
+            ROS_ERROR_STREAM("Message from " << msg->getTopic() << " is too large for buffer");
+        }
     }
 
     for(BufferEntry& e : droppedMsgs)
