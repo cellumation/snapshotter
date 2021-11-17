@@ -1,10 +1,10 @@
 # Cellumation Snapshotter
-A ROS node that subscribes to all topics and buffers the messages in a ring buffer. It provides a service to dump the buffer contents into a bag file.
+A ROS node that subscribes to a list of topics and buffers the messages in a ring buffer. It provides a service to dump the buffer contents into a bag file.
 This is a powerful tool for post mortem analysis, debugging and testing of large long running ros systems.
 
 ## Introduction
 The idea of the snapshotter was taken from rosbag_snapshot (https://github.com/ros/rosbag_snapshot).
-Initially we maintained a fork of rosbag_snapshot but we forked at such an early time and digressed so far away from the original that there was no chance of ever merhing back. Over time our fork became hard to manage and messy thus we eventually decided on a complete re-implementation that contains only the features that we need.
+Initially we maintained a fork of rosbag_snapshot but we forked at such an early time and digressed so far away from the original that there was no chance of ever merging back. Over time our fork became hard to manage and messy thus we eventually decided on a complete re-implementation that contains only the features that we need.
 
 ## Usage
 ### Launching
