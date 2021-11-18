@@ -33,6 +33,9 @@
 ********************************************************************/
 #include "Snapshotter.hpp"
 #include <rosbag/bag.h>
+#include <thread>
+#include <sys/resource.h>
+#include <cerrno>
 
 using Subscriber = ros::Subscriber;
 
@@ -84,39 +87,73 @@ void Snapshotter::writeBagFile(const std::string& path, BagCompression compressi
         throw BagWriteException("Unhandled enum value");
     }
 
-    try
+
+    std::unique_ptr<MessageRingBuffer> bufferCopy;
+    std::unique_ptr<SingleMessageBuffer> latchedBufferCopy;
     {
-        std::unique_ptr<MessageRingBuffer> bufferCopy;
-        std::unique_ptr<SingleMessageBuffer> latchedBufferCopy;
+        //wait until all threads have stopped writing to the buffers,
+        //then copy both buffers
+        std::unique_lock lock(writeBagLock);
+        bufferCopy.reset(new MessageRingBuffer(buffer));
+        latchedBufferCopy.reset(new SingleMessageBuffer(lastDroppedLatchedMsgs));
+    }
+
+    //replace the dropped-callback of the copied buffer. Otherwise dropped messages
+    //from that buffer would end up in the original lastDroppedLatchedMsgs buffer.
+    bufferCopy->setDroppedCb([](BufferEntry&&){});
+
+    //writing is done in a seperate thread because errors might happen
+    //during writing and there is no guaranteed way to reset the
+    //thread priority once an error occurred. If we would use one
+    //of the ros threads we would leave a ros thread with very low
+    //priority behind in case of error.
+    //Even with perfect error handling the call to reset the
+    //priority could still fail (and in fact did fail on my machine).
+    //Thus it is much easier and safer to spawn a new thread and let
+    //it die once we are done writing.
+    std::exception_ptr ex = nullptr;
+    std::thread t([&]
+    {
+        try
         {
-            //wait until all threads have stopped writing to the buffers,
-            //then copy both buffers
-            std::unique_lock lock(writeBagLock);
-            bufferCopy.reset(new MessageRingBuffer(buffer));
-            latchedBufferCopy.reset(new SingleMessageBuffer(lastDroppedLatchedMsgs));
+            //according to posix this sets the nice value for the whole process
+            //but in reality this sets the thread priority on linux.
+            //There does not seem to be any other way to set the thread priority on
+            //a non-realtime kernel :-(
+            // https://stackoverflow.com/questions/10876342/equivalent-of-setthreadpriority-on-linux-pthreads
+            if(0 != setpriority(PRIO_PROCESS, 0, 19))
+            {
+                const std::string msg = "setpriority failed: " + std::string(std::strerror(errno));
+                ROS_ERROR_STREAM(msg);
+                ex = std::make_exception_ptr(BagWriteException(msg));
+                return;
+            }
+            bag.open(path, bagmode::Write);
+            /** write all old latched messages 3 seconds before the actual log starts.
+             *  The value 3 is arbitrary. The idea is to make the old latched messages stand out
+             *  to a human reader when looking at the bag. */
+            const ros::Time latchedTime = bufferCopy->getOldestReceiveTime() - ros::Duration(3);
+            latchedBufferCopy->writeToBag(bag, latchedTime);
+
+            bufferCopy->writeToBag(bag);
+            bag.close();
+
+        }
+        catch(const std::exception& e)
+        {
+            ex = std::make_exception_ptr(BagWriteException(e.what()));
+        }
+        catch(...) //we really really don't want to crash :D
+        {
+            ex = std::make_exception_ptr(BagWriteException("unknown error"));
         }
 
-        //replace the dropped-callback of the copied buffer. Otherwise dropped messages
-        //from that buffer would end up in the original lastDroppedLatchedMsgs buffer.
-        bufferCopy->setDroppedCb([](BufferEntry&&){});
+    });
+    t.join();
 
-        bag.open(path, bagmode::Write);
-        /** write all old latched messages 3 seconds before the actual log starts.
-         *  The value 3 is arbitrary. The idea is to make the old latched messages stand out
-         *  to a human reader when looking at the bag. */
-        const ros::Time latchedTime = bufferCopy->getOldestReceiveTime() - ros::Duration(3);
-        latchedBufferCopy->writeToBag(bag, latchedTime);
-
-        bufferCopy->writeToBag(bag);
-        bag.close();
-    }
-    catch(const std::exception& ex)
+    if(ex)
     {
-        throw BagWriteException(ex.what());
-    }
-    catch(...) //we really really don't want to crash :D
-    {
-        throw BagWriteException("unknown error");
+        std::rethrow_exception(ex);
     }
 }
 
