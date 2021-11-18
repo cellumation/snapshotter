@@ -51,9 +51,11 @@ public:
     struct Config
     {
         size_t maxMemoryBytes;
-        /** If true the last message of each latched topic will be kept inside the buffer.
-         */
+        /** If true the last message of each latched topic will be kept inside the buffer.         */
         bool keepLatched;
+        /** If true the snapshotter will set the thread nice value to 19 when
+         *  writing a bag file. see manpage setpriority(2) for details. */
+        bool niceOnWrite;
     };
 
     Snapshotter(ros::NodeHandle& nh, const Config& cfg);

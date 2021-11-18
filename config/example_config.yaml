@@ -11,6 +11,12 @@ max_memory_mb: 5000
 # "fast" = some compression, medium file size but reasonably fast
 bag_compression: "fast"
 
+# If true the snapshotter will switch the nice value of the thread that is
+# writing a bag file to disk to 19. I.e. the thread will yield to everyone
+# with a higher priority. This enables writing to disk without interrupting
+# other processes.
+nice_on_write: True
+
 # A list of regexes that should be excluded from logging. Every topic that
 # matches a regex in this list is not logged.
 exclude_topics:
