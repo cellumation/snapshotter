@@ -116,17 +116,20 @@ void Snapshotter::writeBagFile(const std::string& path, BagCompression compressi
     {
         try
         {
-            //according to posix this sets the nice value for the whole process
-            //but in reality this sets the thread priority on linux.
-            //There does not seem to be any other way to set the thread priority on
-            //a non-realtime kernel :-(
-            // https://stackoverflow.com/questions/10876342/equivalent-of-setthreadpriority-on-linux-pthreads
-            if(0 != setpriority(PRIO_PROCESS, 0, 19))
+            if(cfg.niceOnWrite)
             {
-                const std::string msg = "setpriority failed: " + std::string(std::strerror(errno));
-                ROS_ERROR_STREAM(msg);
-                ex = std::make_exception_ptr(BagWriteException(msg));
-                return;
+                //according to posix this sets the nice value for the whole process
+                //but in reality this sets the thread priority on linux.
+                //There does not seem to be any other way to set the thread priority on
+                //a non-realtime kernel :-(
+                // https://stackoverflow.com/questions/10876342/equivalent-of-setthreadpriority-on-linux-pthreads
+                if(0 != setpriority(PRIO_PROCESS, 0, 19))
+                {
+                    const std::string msg = "setpriority failed: " + std::string(std::strerror(errno));
+                    ROS_ERROR_STREAM(msg);
+                    ex = std::make_exception_ptr(BagWriteException(msg));
+                    return;
+                }
             }
             bag.open(path, bagmode::Write);
             /** write all old latched messages 3 seconds before the actual log starts.

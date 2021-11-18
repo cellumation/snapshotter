@@ -80,6 +80,11 @@ int main(int argc, char **argv)
     }
     cfg.maxMemoryBytes = size_t(maxMemoryMb) * size_t(1024 * 1024);
 
+    if(!nh.getParam("nice_on_write", cfg.niceOnWrite))
+    {
+        throw std::runtime_error("Parameter 'nice_on_write' missing");
+    }
+
     Snapshotter snapshotter(nh, cfg);
 
     boost::function<void (const ros::TimerEvent&)> subscribeTopics =
