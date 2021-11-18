@@ -2,6 +2,15 @@
 A ROS node that subscribes to a list of topics and buffers the messages in a ring buffer. It provides a service to dump the buffer contents into a bag file.
 This is a powerful tool for post mortem analysis, debugging and testing of large long running ros systems.
 
+## Features
+- Very little memory overhead. (10GB of ram usage result in a 9.8gb bag file)
+- Automatically subscribes to new topics as they become available
+- Keep latched topics
+- Exclude topics based on regex
+- Configurable memory usage limit
+- Compression of bag files
+- Limit cpu usage when compressing/writing by setting the nice value
+
 ## Introduction
 The idea of the snapshotter was taken from rosbag_snapshot (https://github.com/ros/rosbag_snapshot).
 Initially we maintained a fork of rosbag_snapshot but we forked at such an early time and digressed so far away from the original that there was no chance of ever merging back. Over time our fork became hard to manage and messy thus we eventually decided on a complete re-implementation that contains only the features that we need.
@@ -28,21 +37,20 @@ max_memory_mb: 5000
 # "fast" = some compression, medium file size but reasonably fast
 bag_compression: "fast"
 
+# If true the snapshotter will switch the nice value of the thread that is
+# writing a bag file to disk to 19. I.e. the thread will yield to everyone
+# with a higher priority. This enables writing to disk without interrupting
+# other processes.
+nice_on_write: True
+
 # A list of regexes that should be excluded from logging. Every topic that
 # matches a regex in this list is not logged.
 exclude_topics:
   - /vision/camera_\d+/depth/.*
-  - /vision/camera_\d+/passenger_detection/debug.*
+  - /some/topic
+
 
 ```
-
-## Features
-- Very little memory overhead. (10GB of ram usage result in a 9.8gb bag file)
-- Automatically subscribes to new topics as they become available
-- Keep latched topics
-- Exclude topics based on regex
-- Configurable memory usage limit
-- Compression of bag files
 
 ## Performance Evaluation and Comparision
 We evaluated three simple scenarios to evaluate the overall performance of our implementation.
@@ -86,7 +94,3 @@ Limit memory usage to 10GB.
 - When logging mostly very large messages (e.g. images) the difference in memory efficiency is small
 - When logging mostly small messages the difference in memory efficiency is significant
 - The main source of cpu usage for both implementation is message size. The bigger the messages the higher the cpu load.
-
- 
- 
- 

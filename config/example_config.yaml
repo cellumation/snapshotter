@@ -21,4 +21,5 @@ nice_on_write: True
 # matches a regex in this list is not logged.
 exclude_topics:
   - /vision/camera_\d+/depth/.*
-  - /vision/camera_\d+/passenger_detection/debug.*
+  - /some/other/topic
+  - /or/some/other/regexp.*
