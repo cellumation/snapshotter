@@ -94,8 +94,8 @@ void Snapshotter::writeBagFile(const std::string& path, BagCompression compressi
         //wait until all threads have stopped writing to the buffers,
         //then copy both buffers
         std::unique_lock lock(writeBagLock);
-        bufferCopy.reset(new MessageRingBuffer(buffer));
-        latchedBufferCopy.reset(new SingleMessageBuffer(lastDroppedLatchedMsgs));
+        bufferCopy = std::make_unique<MessageRingBuffer>(buffer);
+        latchedBufferCopy = std::make_unique<SingleMessageBuffer>(lastDroppedLatchedMsgs);
     }
 
     //replace the dropped-callback of the copied buffer. Otherwise dropped messages
