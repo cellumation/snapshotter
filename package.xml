@@ -11,7 +11,6 @@
   <depend>roscpp</depend>
   <depend>rosgraph_msgs</depend>
   <depend>std_msgs</depend>
-  <depend>system_state_monitor</depend>
   <exec_depend>message_runtime</exec_depend>
   <depend>std_srvs</depend>
 

@@ -12,8 +12,7 @@ set(catkinDependencies
     rosbag_storage
     roscpp
     rosgraph_msgs
-    std_msgs
-    system_state_monitor)
+    std_msgs)
 
 find_package(catkin REQUIRED COMPONENTS ${catkinDependencies} message_generation)
 
