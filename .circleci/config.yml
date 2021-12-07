@@ -1,0 +1,29 @@
+version: 2.1
+
+jobs:
+  build-ros-componenet:
+    docker:
+      - image: ros:noetic-ros-base-focal
+    working_directory: /ws/src
+    steps:
+      - run:
+          name: "install required tools"
+          command: |
+            apt-get update
+            apt-get install git 
+      - run:
+          name: "create workspace"
+          command: "mkdir -p /ws/src"
+      - run:
+          name: "checkout via https"
+          working_directory: "/ws/src"
+          command: "git clone https://github.com/cellumation/snapshotter.git"
+      - run:
+          name: "Say hello"
+          working_directory: /ws
+          command: "catkin_build"
+
+workflows:
+  build:
+    jobs:
+      - build-ros-componenet
