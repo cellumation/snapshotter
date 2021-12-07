@@ -21,7 +21,9 @@ jobs:
       - run:
           name: "build snapshotter"
           working_directory: /ws
-          command: "catkin_make"
+          command: |
+            source /opt/ros/noetic/setup.bash
+            catkin_make
 
 workflows:
   build:
