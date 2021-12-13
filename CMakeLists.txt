@@ -80,7 +80,7 @@ install(DIRECTORY launch/
 find_package(rostest REQUIRED)
 find_package(gtest)
 
-catkin_add_gtest(utest test/test.test test/test_node.cpp)
+add_rostest_gtest(utest test/test.test test/test_node.cpp)
 target_link_libraries(utest
     ${catkin_LIBRARIES}
     ${Boost_LIBRARIES}
