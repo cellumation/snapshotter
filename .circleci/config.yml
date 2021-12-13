@@ -1,5 +1,10 @@
 version: 2.1
 
+workflows:
+  build:
+    jobs:
+      - build-ros-componenet
+
 jobs:
   build-ros-componenet:
     docker:
@@ -10,7 +15,7 @@ jobs:
           name: "install required tools"
           command: |
             apt-get update
-            apt-get install -y --no-install-recommends git 
+            apt-get install -y --no-install-recommends git python3-catkin-tools
       - run:
           name: "create workspace"
           command: "mkdir -p /ws/src"
@@ -22,10 +27,6 @@ jobs:
           name: "build snapshotter"
           working_directory: /ws
           command: |
-            source /opt/ros/noetic/setup.bash
-            catkin_make
-
-workflows:
-  build:
-    jobs:
-      - build-ros-componenet
+            catkin init -w .
+            catkin config --extend /opt/ros/noetic
+            catkin build
