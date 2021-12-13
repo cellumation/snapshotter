@@ -30,3 +30,4 @@ jobs:
             catkin init -w .
             catkin config --extend /opt/ros/noetic
             catkin build
+            catkin test
