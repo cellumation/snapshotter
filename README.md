@@ -1,4 +1,7 @@
 # Cellumation Snapshotter
+![CircleCI](https://img.shields.io/circleci/build/github/cellumation/snapshotter)
+![GitHub](https://img.shields.io/github/license/cellumation/snapshotter)
+
 A ROS node that subscribes to a list of topics and buffers the messages in a ring buffer. It provides a service to dump the buffer contents into a bag file.
 This is a powerful tool for post mortem analysis, debugging and testing of large long running ros systems.
 

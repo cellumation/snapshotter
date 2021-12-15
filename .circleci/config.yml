@@ -1,0 +1,33 @@
+version: 2.1
+
+workflows:
+  build:
+    jobs:
+      - build-ros-componenet
+
+jobs:
+  build-ros-componenet:
+    docker:
+      - image: ros:noetic-ros-base-focal
+    working_directory: /ws/src
+    steps:
+      - run:
+          name: "install required tools"
+          command: |
+            apt-get update
+            apt-get install -y --no-install-recommends git python3-catkin-tools
+      - run:
+          name: "create workspace"
+          command: "mkdir -p /ws/src"
+      - run:
+          name: "checkout via https"
+          working_directory: "/ws/src"
+          command: "git clone https://github.com/cellumation/snapshotter.git"
+      - run:
+          name: "build snapshotter"
+          working_directory: /ws
+          command: |
+            catkin init -w .
+            catkin config --extend /opt/ros/noetic
+            catkin build
+            catkin test
