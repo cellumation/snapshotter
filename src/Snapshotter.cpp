@@ -134,9 +134,11 @@ void Snapshotter::writeBagFile(const std::string& path, BagCompression compressi
             bag.open(path, bagmode::Write);
             /** write all old latched messages 3 seconds before the actual log starts.
              *  The value 3 is arbitrary. The idea is to make the old latched messages stand out
-             *  to a human reader when looking at the bag. */
-            const ros::Time latchedTime = bufferCopy->getOldestReceiveTime() - ros::Duration(3);
-            latchedBufferCopy->writeToBag(bag, latchedTime);
+             *  to a human reader when looking at the bag. We do the calculation in double because ros::Time will throw when
+             *  the time becomes negative (which can happen when running in simulation because sim time starts at 0) */
+            double latchedTime = bufferCopy->getOldestReceiveTime().toSec() - 3.0;
+            latchedTime = std::max(latchedTime, 0.0);
+            latchedBufferCopy->writeToBag(bag, ros::Time{latchedTime});
 
             bufferCopy->writeToBag(bag);
             bag.close();
