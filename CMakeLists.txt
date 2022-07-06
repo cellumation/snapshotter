@@ -78,7 +78,6 @@ install(DIRECTORY launch/
 ## Testing ##
 #############
 find_package(rostest REQUIRED)
-find_package(gtest)
 
 add_rostest_gtest(utest test/test.test test/test_node.cpp)
 target_link_libraries(utest
