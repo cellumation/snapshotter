@@ -31,11 +31,14 @@
  *  ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  *  POSSIBILITY OF SUCH DAMAGE.
  ********************************************************************/
+
 #include "Snapshotter.hpp"
 #include "TopicFilter.hpp"
-#include "ros/ros.h"
-#include <mutex>
+
+#include <ros/ros.h>
 #include <snapshotter/TakeSnapshot.h>
+
+#include <mutex>
 #include <string>
 #include <vector>
 
@@ -68,7 +71,12 @@ int main(int argc, char** argv)
     {
         throw std::runtime_error("Parameter 'exclude_topics' missing");
     }
-    TopicFilter topicFilter({excludeRegexes});
+    std::vector<std::string> includeRegexes;
+    if (!nh.getParam("include_topics", includeRegexes))
+    {
+        throw std::runtime_error("Parameter 'include_topics' missing");
+    }
+    TopicFilter topicFilter(excludeRegexes, includeRegexes);
 
     Snapshotter::Config cfg;
 
