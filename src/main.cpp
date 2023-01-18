@@ -21,7 +21,7 @@
  *  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
  *  "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
  *  LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
- *  FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
+ *  FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THu
  *  COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
  *  INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
  *  BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
@@ -94,15 +94,16 @@ int main(int argc, char** argv)
 
     Snapshotter snapshotter(nh, cfg);
 
-    boost::function<void(const ros::TimerEvent&)> subscribeTopics = [&snapshotter, &topicFilter](const ros::TimerEvent&)
-    {
+    boost::function<void(const ros::TimerEvent&)> subscribeTopics = [&snapshotter,
+                                                                     &topicFilter](const ros::TimerEvent&) {
         ros::master::V_TopicInfo allTopics;
         if (ros::master::getTopics(allTopics))
         {
             // sorting is only done to make the debug output more readable.
             std::sort(allTopics.begin(), allTopics.end(),
-                      [](const ros::master::TopicInfo& a, const ros::master::TopicInfo& b) -> bool
-                      { return a.name < b.name; });
+                      [](const ros::master::TopicInfo& a, const ros::master::TopicInfo& b) -> bool {
+                          return a.name < b.name;
+                      });
 
             for (const ros::master::TopicInfo& ti : allTopics)
             {
@@ -122,35 +123,34 @@ int main(int argc, char** argv)
     std::mutex takeSnapshotServiceLock;
 
     boost::function<bool(snapshotter::TakeSnapshotRequest&, snapshotter::TakeSnapshotResponse&)> takeSnapshotCb =
-        [&](snapshotter::TakeSnapshotRequest& req, snapshotter::TakeSnapshotResponse& resp)
-    {
-        std::unique_lock<std::mutex> lock(takeSnapshotServiceLock, std::try_to_lock);
-        if (!lock.owns_lock())
-        {
-            // mutex wasn't locked. Handle it.
-            resp.success = false;
-            resp.message = "Already taking a snapshot.";
+        [&](snapshotter::TakeSnapshotRequest& req, snapshotter::TakeSnapshotResponse& resp) {
+            std::unique_lock<std::mutex> lock(takeSnapshotServiceLock, std::try_to_lock);
+            if (!lock.owns_lock())
+            {
+                // mutex wasn't locked. Handle it.
+                resp.success = false;
+                resp.message = "Already taking a snapshot.";
+                return true;
+            }
+
+            try
+            {
+                snapshotter.writeBagFile(req.filename, compression);
+                resp.success = true;
+            }
+            catch (const std::exception& e)
+            {
+                resp.message = e.what();
+                resp.success = false;
+            }
+            catch (...)
+            {
+                resp.message = "unknown error";
+                resp.success = false;
+            }
+
             return true;
-        }
-
-        try
-        {
-            snapshotter.writeBagFile(req.filename, compression);
-            resp.success = true;
-        }
-        catch (const std::exception& e)
-        {
-            resp.message = e.what();
-            resp.success = false;
-        }
-        catch (...)
-        {
-            resp.message = "unknown error";
-            resp.success = false;
-        }
-
-        return true;
-    };
+        };
     auto serv = nh.advertiseService("take_snapshot", takeSnapshotCb);
 
     int numThreads = 1;
