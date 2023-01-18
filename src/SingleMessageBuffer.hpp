@@ -61,7 +61,7 @@ public:
      *  @param rewriteTimestamp All messages will use this timestamp as receivedTime inside the bag
      *  @throw BagWriteException in case of error
      *  is thread-safe */
-    void writeToBag(rosbag::Bag& bag, const ros::Time& rewriteTimestamp) const;
+    void writeToBag(rosbag::Bag& bag, ros::Time rewriteTimestamp) const;
 
 private:
     using TopicName = std::string;

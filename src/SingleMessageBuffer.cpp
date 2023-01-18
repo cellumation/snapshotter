@@ -67,13 +67,19 @@ void SingleMessageBuffer::push(BufferEntry&& entry, bool keepNewer)
     }
 }
 
-void SingleMessageBuffer::writeToBag(rosbag::Bag& bag, const ros::Time& rewriteTimestamp) const
+void SingleMessageBuffer::writeToBag(rosbag::Bag& bag, ros::Time rewriteTimestamp) const
 {
     std::scoped_lock lock(messagesLock);
-
-    for (auto& [topic, message] : messages)
+    if(rewriteTimestamp < ros::TIME_MIN)
     {
-        bag.write(topic, rewriteTimestamp, message.msg, message.msg->getConnectionHeader());
+        ROS_WARN_STREAM("rewriteTimestamp < ros::TIME_MIN. Fixing timestamp");
+        rewriteTimestamp = ros::TIME_MIN;
+    }
+
+    for(auto& [topic, message] : messages)
+    {
+        bag.write(topic, rewriteTimestamp, message.msg,
+                message.msg->getConnectionHeader());
     }
 }
 

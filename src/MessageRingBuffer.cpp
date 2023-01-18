@@ -94,7 +94,16 @@ void MessageRingBuffer::writeToBag(rosbag::Bag& bag) const
     std::scoped_lock lock(bufferLock);
     for (const BufferEntry& entry : buffer)
     {
-        bag.write(entry.msg->getTopic(), entry.receiveTime, entry.msg, entry.msg->getConnectionHeader());
+        if (entry.receiveTime >= ros::TIME_MIN)
+        {
+            bag.write(entry.msg->getTopic(), entry.receiveTime, entry.msg, entry.msg->getConnectionHeader());
+        }
+        else
+        {
+            bag.write(entry.msg->getTopic(), ros::TIME_MIN, entry.msg, entry.msg->getConnectionHeader());
+            ROS_WARN_STREAM("Message timestamp < ros::TIME_MIN. Replacing timestamp with ros::TIME_MIN. Topic: "
+                            << entry.msg->getTopic());
+        }
     }
 }
 
