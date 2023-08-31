@@ -32,7 +32,8 @@
  *  POSSIBILITY OF SUCH DAMAGE.
  ********************************************************************/
 #include "MessageRingBuffer.hpp"
-#include <rosbag/bag.h>
+#include <rclcpp/logging.hpp>
+#include <rosbag2_cpp/writer.hpp>
 
 namespace snapshotter
 {
@@ -50,13 +51,26 @@ void MessageRingBuffer::setDroppedCb(std::function<void(BufferEntry&&)> cb)
     droppedCb = cb;
 }
 
-void MessageRingBuffer::push(ShapeShifterMsg::ConstPtr msg, const ros::Time& receiveTime)
+static size_t getMemorySize(const SerializedMsgPtr& msg)
 {
-    const size_t entrySize = msg->objectSize() + sizeof(ros::Time);
+    return sizeof(rclcpp::SerializedMessage) + msg->capacity();
+}
+
+static size_t getMemorySize(const BufferEntry& e)
+{
+    return sizeof(BufferEntry) + getMemorySize(e.msg);
+}
+
+void MessageRingBuffer::push(SerializedMsgPtr msg, const rclcpp::Time& receiveTime, const TopicMetadata& md)
+{
+    BufferEntry e(std::move(msg), receiveTime, md);
+
+    const size_t entrySize = getMemorySize(e);
 
     if (entrySize > maxSize)
     {
-        ROS_WARN_STREAM("Message from " << msg->getTopic() << " is too large for buffer. Ignoring message");
+        rclcpp::Logger log = rclcpp::get_logger("snapshotter");
+        RCLCPP_WARN_STREAM(log, "Message from " << md.topicName << " is too large for buffer. Ignoring message");
         return;
     }
 
@@ -68,18 +82,19 @@ void MessageRingBuffer::push(ShapeShifterMsg::ConstPtr msg, const ros::Time& rec
         {
             // we accumulate all dropped messages to invoke the droppedCallback after unlocking.
             // The callback might take a long time and potentially lock other resources causing a deadlock
-            currentSize -= buffer.front().msg->objectSize() + sizeof(ros::Time);
+            currentSize -= getMemorySize(buffer.front());
             droppedMsgs.emplace_back(std::move(buffer.front()));
             buffer.pop_front();
         }
         if (currentSize + entrySize <= maxSize)
         {
             currentSize += entrySize;
-            buffer.emplace_back(std::move(msg), receiveTime);
+            buffer.push_back(std::move(e));
         }
         else
         {
-            ROS_ERROR_STREAM("Message from " << msg->getTopic() << " is too large for buffer");
+            rclcpp::Logger log = rclcpp::get_logger("snapshotter");
+            RCLCPP_ERROR_STREAM(log, "Message from " << md.topicName << " is too large for buffer");
         }
     }
 
@@ -89,20 +104,25 @@ void MessageRingBuffer::push(ShapeShifterMsg::ConstPtr msg, const ros::Time& rec
     }
 }
 
-void MessageRingBuffer::writeToBag(rosbag::Bag& bag) const
+void MessageRingBuffer::writeToBag(rosbag2_cpp::Writer& writer, const std::vector<TopicMetadata>& topicMetadata) const
 {
     std::scoped_lock lock(bufferLock);
     for (const BufferEntry& entry : buffer)
     {
-        if (entry.receiveTime >= ros::TIME_MIN)
+        const TopicMetadata& md(topicMetadata[entry.topicMetaDataIdx]);
+        if (entry.receiveTime >= minValidTimeStamp)
         {
-            bag.write(entry.msg->getTopic(), entry.receiveTime, entry.msg, entry.msg->getConnectionHeader());
+            writer.write(entry.msg, md.topicName, md.topicTypeName, entry.receiveTime);
         }
         else
         {
-            bag.write(entry.msg->getTopic(), ros::TIME_MIN, entry.msg, entry.msg->getConnectionHeader());
-            ROS_WARN_STREAM("Message timestamp < ros::TIME_MIN. Replacing timestamp with ros::TIME_MIN. Topic: "
-                            << entry.msg->getTopic());
+            // FIXME is this the workaround for the crash on time zero of rosbag1 ?
+            writer.write(entry.msg, md.topicName, md.topicTypeName, minValidTimeStamp);
+
+            rclcpp::Logger log = rclcpp::get_logger("snapshotter");
+            RCLCPP_WARN_STREAM(log,
+                               "Message timestamp < rclcpp::Time(0). Replacing timestamp with rclcpp::Time(0). Topic:"
+                                   << md.topicName);
         }
     }
 }
@@ -118,10 +138,15 @@ void MessageRingBuffer::clear()
     currentSize = 0;
 }
 
-ros::Time MessageRingBuffer::getOldestReceiveTime() const
+rclcpp::Time MessageRingBuffer::getOldestReceiveTime() const
 {
     std::scoped_lock lock(bufferLock);
-    ros::Time oldestTime = ros::Time::now() + ros::Duration(10); // start with a timestamp in the future
+    if (buffer.empty())
+    {
+        return minValidTimeStamp;
+    }
+
+    rclcpp::Time oldestTime = buffer.front().receiveTime;
     for (const BufferEntry& entry : buffer)
     {
         oldestTime = std::min(oldestTime, entry.receiveTime);

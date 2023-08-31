@@ -1,22 +1,22 @@
 <?xml version="1.0"?>
-<package format="2">
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
   <name>snapshotter</name>
-  <version>1.0.0</version>
+  <version>1.1.0</version>
   <description>A complete rewrite of the snapshotter</description>
   <maintainer email="a.boeckmann@cellumation.com">Arne</maintainer>
   <license>BSD-3-Clause</license>
-  <buildtool_depend>catkin</buildtool_depend>
-  <depend>rosbag</depend>
-  <depend>rosbag_storage</depend>
-  <depend>roscpp</depend>
-  <depend>rosgraph_msgs</depend>
+  <buildtool_depend>ament_cmake</buildtool_depend>
+  <depend>rclcpp</depend>
+  <depend>rosbag2_cpp</depend>
   <depend>std_msgs</depend>
-  <exec_depend>message_runtime</exec_depend>
-  <depend>std_srvs</depend>
+  <buildtool_depend>rosidl_default_generators</buildtool_depend>
+  <exec_depend>rosidl_default_runtime</exec_depend>
+  <exec_depend>ros2launch</exec_depend>
+  <member_of_group>rosidl_interface_packages</member_of_group>
 
   <!-- The export tag contains other, unspecified, tags -->
   <export>
-    <!-- Other tools can request additional information be placed here -->
-
+    <build_type>ament_cmake</build_type>
   </export>
 </package>

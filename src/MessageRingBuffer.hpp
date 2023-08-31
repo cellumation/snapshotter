@@ -33,15 +33,14 @@
  ********************************************************************/
 #pragma once
 #include "Common.hpp"
-#include "ShapeShifterMsg.hpp"
 #include <deque>
 #include <functional>
 #include <mutex>
-#include <ros/time.h>
+#include <rclcpp/time.hpp>
 
-namespace rosbag
+namespace rosbag2_cpp
 {
-class Bag;
+class Writer;
 }
 
 namespace snapshotter
@@ -66,12 +65,14 @@ public:
     /** Add a new message to the ring buffer.
      *  If there is no space left the oldest message will be deleted.
      *  is thread-safe */
-    void push(ShapeShifterMsg::ConstPtr msg, const ros::Time& receiveTime);
+    void push(SerializedMsgPtr msg, const rclcpp::Time& receiveTime, const TopicMetadata& md);
 
     /** Writes the content of the buffer to a bag file.
      *  @throw BagWriteException in case of error
-     *  is thread-safe */
-    void writeToBag(rosbag::Bag& bag) const;
+     *  is thread-safe
+     *  @param topicMetadata Array of metadata of all subscribed topics.
+     */
+    void writeToBag(rosbag2_cpp::Writer& writer, const std::vector<TopicMetadata>& topicMetadata) const;
 
     /** Removes all entries from this buffer.
      *  is thread-safe */
@@ -79,7 +80,7 @@ public:
 
     /** Returns the oldest received-timestamp currently present in the buffer.
      *  is thread-safe */
-    ros::Time getOldestReceiveTime() const;
+    rclcpp::Time getOldestReceiveTime() const;
 
     void setDroppedCb(std::function<void(BufferEntry&&)> cb);
 

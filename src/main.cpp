@@ -35,8 +35,9 @@
 #include "Snapshotter.hpp"
 #include "TopicFilter.hpp"
 
-#include <ros/ros.h>
-#include <snapshotter/TakeSnapshot.h>
+#include <rclcpp/executors.hpp>
+#include <rclcpp/node.hpp>
+#include <snapshotter/srv/take_snapshot.hpp>
 
 #include <mutex>
 #include <string>
@@ -44,127 +45,112 @@
 
 using namespace snapshotter;
 
-BagCompression getCompression(ros::NodeHandle& nh)
+BagCompression getCompression(rclcpp::Node& nh)
 {
-    std::string compression;
-    if (!nh.getParam("bag_compression", compression))
-    {
-        throw std::runtime_error("Parameter 'bag_compression' missing");
-    }
+    std::string compression = nh.get_parameter("bag_compression").as_string();
 
     if (compression == "none")
+    {
         return BagCompression::NONE;
+    }
     if (compression == "slow")
+    {
         return BagCompression::SLOW;
+    }
     if (compression == "fast")
+    {
         return BagCompression::FAST;
+    }
     throw std::runtime_error("Parameter bag_compression has illegal value: '" + compression + "'");
 }
 
 int main(int argc, char** argv)
 {
-    ros::init(argc, argv, "snapshotter_test");
-    ros::NodeHandle nh("~");
+    rclcpp::init(argc, argv);
 
-    std::vector<std::string> excludeRegexes;
-    if (!nh.getParam("exclude_topics", excludeRegexes))
-    {
-        throw std::runtime_error("Parameter 'exclude_topics' missing");
-    }
-    std::vector<std::string> includeRegexes;
-    if (!nh.getParam("include_topics", includeRegexes))
-    {
-        throw std::runtime_error("Parameter 'include_topics' missing");
-    }
+    rclcpp::NodeOptions ops;
+    ops.automatically_declare_parameters_from_overrides(true);
+
+    rclcpp::Node nh("snapshotter", ops);
+
+    std::vector<std::string> excludeRegexes = nh.get_parameter("exclude_topics").as_string_array();
+    std::vector<std::string> includeRegexes; // = nh.get_parameter("include_topics").as_string_array();
     TopicFilter topicFilter(excludeRegexes, includeRegexes);
 
     Snapshotter::Config cfg;
 
-    int maxMemoryMb = 0;
-    if (!nh.getParam("max_memory_mb", maxMemoryMb))
+    int maxMemoryMb = nh.get_parameter("max_memory_mb").as_int();
+    if (maxMemoryMb < 0)
     {
-        throw std::runtime_error("Parameter 'max_memory_mb' missing");
+        throw std::runtime_error("Parameter 'maxMemoryMb' must be > 0");
     }
     cfg.maxMemoryBytes = size_t(maxMemoryMb) * size_t(1024 * 1024);
-
-    if (!nh.getParam("nice_on_write", cfg.niceOnWrite))
-    {
-        throw std::runtime_error("Parameter 'nice_on_write' missing");
-    }
+    cfg.niceOnWrite = nh.get_parameter("nice_on_write").as_bool();
 
     Snapshotter snapshotter(nh, cfg);
 
-    boost::function<void(const ros::TimerEvent&)> subscribeTopics = [&snapshotter,
-                                                                     &topicFilter](const ros::TimerEvent&) {
-        ros::master::V_TopicInfo allTopics;
-        if (ros::master::getTopics(allTopics))
-        {
-            // sorting is only done to make the debug output more readable.
-            std::sort(allTopics.begin(), allTopics.end(),
-                      [](const ros::master::TopicInfo& a, const ros::master::TopicInfo& b) -> bool {
-                          return a.name < b.name;
-                      });
+    std::function<void()> subscribeTopics = [&snapshotter, &topicFilter, &nh]() {
+        std::map<std::string, std::vector<std::string>> allTopics = nh.get_topic_names_and_types();
 
-            for (const ros::master::TopicInfo& ti : allTopics)
+        for (const auto& [topicName, _] : allTopics)
+        {
+            if (!topicFilter.exclude(topicName))
             {
-                if (!topicFilter.exclude(ti.name))
-                {
-                    snapshotter.subscribe(ti.name);
-                }
+                snapshotter.subscribe(topicName);
             }
         }
     };
     // call once to immediately subscribe to all available topics
-    subscribeTopics(ros::TimerEvent{});
-    ros::Timer topicCheck = nh.createTimer(ros::Duration(2.0), subscribeTopics);
+    subscribeTopics();
+    auto topicCheck = nh.create_wall_timer(std::chrono::seconds(2), subscribeTopics);
 
     BagCompression compression = getCompression(nh);
 
     std::mutex takeSnapshotServiceLock;
 
-    boost::function<bool(snapshotter::TakeSnapshotRequest&, snapshotter::TakeSnapshotResponse&)> takeSnapshotCb =
-        [&](snapshotter::TakeSnapshotRequest& req, snapshotter::TakeSnapshotResponse& resp) {
+    std::function<bool(snapshotter::srv::TakeSnapshot::Request::SharedPtr,
+                       snapshotter::srv::TakeSnapshot::Response::SharedPtr)>
+        takeSnapshotCb = [&](snapshotter::srv::TakeSnapshot::Request::SharedPtr req,
+                             snapshotter::srv::TakeSnapshot::Response::SharedPtr resp) {
             std::unique_lock<std::mutex> lock(takeSnapshotServiceLock, std::try_to_lock);
             if (!lock.owns_lock())
             {
                 // mutex wasn't locked. Handle it.
-                resp.success = false;
-                resp.message = "Already taking a snapshot.";
+                resp->success = false;
+                resp->message = "Already taking a snapshot.";
                 return true;
             }
 
             try
             {
-                snapshotter.writeBagFile(req.filename, compression);
-                resp.success = true;
+                snapshotter.writeBagFile(req->filename, compression);
+                resp->success = true;
             }
             catch (const std::exception& e)
             {
-                resp.message = e.what();
-                resp.success = false;
+                RCLCPP_ERROR_STREAM(nh.get_logger(), "Got exception while writing bag : " << e.what());
+                resp->message = e.what();
+                resp->success = false;
             }
             catch (...)
             {
-                resp.message = "unknown error";
-                resp.success = false;
+                resp->message = "unknown error";
+                resp->success = false;
             }
 
             return true;
         };
-    auto serv = nh.advertiseService("take_snapshot", takeSnapshotCb);
+    auto service = nh.create_service<snapshotter::srv::TakeSnapshot>("take_snapshot", takeSnapshotCb);
 
-    int numThreads = 1;
-    if (!nh.getParam("num_threads", numThreads))
-    {
-        throw std::runtime_error("Parameter 'num_threads' missing");
-    }
+    int numThreads = nh.get_parameter("num_threads").as_int();
 
     if (numThreads <= 0)
     {
         throw std::runtime_error("Parameter 'num_threads' needs to be >= 1");
     }
 
-    ros::MultiThreadedSpinner spinner(numThreads);
-    spinner.spin();
+    rclcpp::executors::MultiThreadedExecutor executor(rclcpp::ExecutorOptions(), numThreads);
+    executor.add_node(nh.get_node_base_interface());
+    executor.spin();
     return 0;
 }

@@ -32,7 +32,8 @@
  *  POSSIBILITY OF SUCH DAMAGE.
  ********************************************************************/
 #include "SingleMessageBuffer.hpp"
-#include <rosbag/bag.h>
+#include <rclcpp/logging.hpp>
+#include <rosbag2_cpp/writer.hpp>
 
 namespace snapshotter
 {
@@ -44,11 +45,10 @@ SingleMessageBuffer::SingleMessageBuffer(const SingleMessageBuffer& other)
 
 void SingleMessageBuffer::push(BufferEntry&& entry, bool keepNewer)
 {
-    const TopicName topic = entry.msg->getTopic(); // buffer because getTopic does map lookup
     {
         std::scoped_lock lock(messagesLock);
 
-        auto existing = messages.find(topic);
+        auto existing = messages.find(entry.topicMetaDataIdx);
         if (existing != messages.end())
         {
             if (keepNewer && existing->second.receiveTime > entry.receiveTime)
@@ -62,24 +62,25 @@ void SingleMessageBuffer::push(BufferEntry&& entry, bool keepNewer)
             // no need to check the return, we know that it succeeded because the
             // entry didn't exist before. We just use try_emplace because it
             // has a nicer api
-            messages.try_emplace(topic, std::move(entry));
+            messages.try_emplace(entry.topicMetaDataIdx, std::move(entry));
         }
     }
 }
 
-void SingleMessageBuffer::writeToBag(rosbag::Bag& bag, ros::Time rewriteTimestamp) const
+void SingleMessageBuffer::writeToBag(rosbag2_cpp::Writer& writer, const std::vector<TopicMetadata>& topicMetadata,
+                                     rclcpp::Time rewriteTimestamp) const
 {
     std::scoped_lock lock(messagesLock);
-    if(rewriteTimestamp < ros::TIME_MIN)
+    if (rewriteTimestamp < minValidTimeStamp)
     {
-        ROS_WARN_STREAM("rewriteTimestamp < ros::TIME_MIN. Fixing timestamp");
-        rewriteTimestamp = ros::TIME_MIN;
+        RCLCPP_WARN(rclcpp::get_logger("snapshotter"), "rewriteTimestamp < rclcpp::TIME_MIN. Fixing timestamp");
+        rewriteTimestamp = minValidTimeStamp;
     }
 
-    for(auto& [topic, message] : messages)
+    for (const auto& [topic, entry] : messages)
     {
-        bag.write(topic, rewriteTimestamp, message.msg,
-                message.msg->getConnectionHeader());
+        const TopicMetadata& md(topicMetadata[entry.topicMetaDataIdx]);
+        writer.write(entry.msg, md.topicName, md.topicTypeName, rewriteTimestamp);
     }
 }
 

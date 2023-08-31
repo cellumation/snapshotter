@@ -33,58 +33,94 @@
  ********************************************************************/
 #include "Snapshotter.hpp"
 #include <cerrno>
-#include <rosbag/bag.h>
+#include <rosbag2_cpp/writer.hpp>
 #include <sys/resource.h>
 #include <thread>
 
-using Subscriber = ros::Subscriber;
-
 namespace snapshotter
 {
-Snapshotter::Snapshotter(ros::NodeHandle& nh, const Snapshotter::Config& cfg) :
+Snapshotter::Snapshotter(rclcpp::Node& nh, const Snapshotter::Config& cfg) :
     nh(nh),
     cfg(cfg),
-    buffer(cfg.maxMemoryBytes, [this](BufferEntry&& e) { messageDroppedFromBufferCB(std::move(e)); })
+    buffer(cfg.maxMemoryBytes, [this](BufferEntry&& e) { messageDroppedFromBufferCB(std::move(e)); }),
+    log(nh.get_logger())
 {}
 
 void Snapshotter::subscribe(const std::string& topic)
 {
     if (subscribedTopics.find(topic) == subscribedTopics.end())
     {
-        ROS_INFO_STREAM("Subscribing to: " << topic);
+        std::optional<TopicMetadata> md;
 
-        boost::shared_ptr<Subscriber> sub(boost::make_shared<Subscriber>());
-        ros::SubscribeOptions ops;
-        ops.topic = topic;
-        ops.queue_size = 50;
-        ops.md5sum = ros::message_traits::md5sum<ShapeShifterMsg>();
-        ops.datatype = ros::message_traits::datatype<ShapeShifterMsg>();
-        ops.helper = boost::make_shared<ros::SubscriptionCallbackHelperT<const ros::MessageEvent<ShapeShifterMsg>&>>(
-            boost::bind(&Snapshotter::topicCB, this, _1));
+        std::vector<rclcpp::TopicEndpointInfo> pubInfo = nh.get_publishers_info_by_topic(topic);
+        for (const rclcpp::TopicEndpointInfo& info : pubInfo)
+        {
+            bool transientLocal = info.qos_profile().durability() == rclcpp::DurabilityPolicy::TransientLocal;
 
-        subscribers.push_back(nh.subscribe(ops));
+            if (md)
+            {
+                if (md->topicTypeName != info.topic_type())
+                {
+                    RCLCPP_WARN_STREAM(log, "Error, node " << info.node_name()
+                                                           << " has different message type than previous nodes "
+                                                           << md->topicTypeName << " vs " << info.topic_type());
+                    continue;
+                }
+
+                // if any publisher is transient local, we subscribe as transient local
+                md->transient_local |= transientLocal;
+            }
+
+            md = TopicMetadata(topic, info.topic_type(), transientLocal, topicMetadata.size());
+        };
+
+        if (!md)
+        {
+            RCLCPP_ERROR_STREAM_ONCE(log, "Error, could not retreive endpoint information for topic " << topic);
+            return;
+        }
+
+        RCLCPP_INFO_STREAM(log, "Subscribing to: " << topic);
+
+        rclcpp::QoS qos(50);
+        if (md->transient_local)
+        {
+            qos.transient_local();
+        }
+
+        TopicMetadata finalMd = *md;
+        {
+            std::lock_guard l(metaDataLock);
+            // push before subscription, the callback might access this
+            topicMetadata.push_back(finalMd);
+        }
+
+        rclcpp::SubscriptionBase::SharedPtr sub = nh.create_generic_subscription(
+            md->topicName, md->topicTypeName, qos, [this, finalMd](SerializedMsgPtr msg) { topicCB(msg, finalMd); });
+
+        subscribers.push_back(sub);
         subscribedTopics.emplace(topic);
     }
 }
 
-void Snapshotter::writeBagFile(const std::string& path, BagCompression compression)
+void Snapshotter::writeBagFile(const std::string& path, BagCompression /*compression*/)
 {
-    using namespace rosbag;
-    Bag bag;
+    using namespace rosbag2_cpp;
+    rosbag2_cpp::Writer writer;
 
-    switch (compression)
-    {
-        case BagCompression::FAST:
-            bag.setCompression(CompressionType::LZ4);
-            break;
-        case BagCompression::SLOW:
-            bag.setCompression(CompressionType::BZ2);
-            break;
-        case BagCompression::NONE:
-            break;
-        default:
-            throw BagWriteException("Unhandled enum value");
-    }
+    //     switch (compression)
+    //     {
+    //         case BagCompression::FAST:
+    //             bag.setCompression(CompressionType::LZ4);
+    //             break;
+    //         case BagCompression::SLOW:
+    //             bag.setCompression(CompressionType::BZ2);
+    //             break;
+    //         case BagCompression::NONE:
+    //             break;
+    //         default:
+    //             throw BagWriteException("Unhandled enum value");
+    //     }
 
     std::unique_ptr<MessageRingBuffer> bufferCopy;
     std::unique_ptr<SingleMessageBuffer> latchedBufferCopy;
@@ -94,6 +130,12 @@ void Snapshotter::writeBagFile(const std::string& path, BagCompression compressi
         std::unique_lock lock(writeBagLock);
         bufferCopy = std::make_unique<MessageRingBuffer>(buffer);
         latchedBufferCopy = std::make_unique<SingleMessageBuffer>(lastDroppedLatchedMsgs);
+    }
+
+    std::vector<TopicMetadata> metaData;
+    {
+        std::unique_lock l(metaDataLock);
+        metaData = topicMetadata;
     }
 
     // replace the dropped-callback of the copied buffer. Otherwise dropped messages
@@ -123,23 +165,23 @@ void Snapshotter::writeBagFile(const std::string& path, BagCompression compressi
                 if (0 != setpriority(PRIO_PROCESS, 0, 19))
                 {
                     const std::string msg = "setpriority failed: " + std::string(std::strerror(errno));
-                    ROS_ERROR_STREAM(msg);
+                    RCLCPP_ERROR_STREAM(log, msg);
                     ex = std::make_exception_ptr(BagWriteException(msg));
                     return;
                 }
             }
-            bag.open(path, bagmode::Write);
+            writer.open(path);
             /** write all old latched messages 3 seconds before the actual log starts.
              *  The value 3 is arbitrary. The idea is to make the old latched messages stand out
-             *  to a human reader when looking at the bag. We do the calculation in double because ros::Time will throw
-             * when
-             *  the time becomes negative (which can happen when running in simulation because sim time starts at 0) */
-            double latchedTime = bufferCopy->getOldestReceiveTime().toSec() - 3.0;
-            latchedTime = std::max(latchedTime, 0.0);
-            latchedBufferCopy->writeToBag(bag, ros::Time{latchedTime});
+             *  to a human reader when looking at the bag. We do the calculation in double because rclcpp::Time will
+             * throw when the time becomes negative (which can happen when running in simulation because sim time starts
+             * at 0) */
+            rclcpp::Time latchedTime = bufferCopy->getOldestReceiveTime() - std::chrono::seconds(3);
+            latchedTime = std::max(latchedTime, rclcpp::Time(static_cast<int64_t>(0), RCL_ROS_TIME));
+            latchedBufferCopy->writeToBag(writer, metaData, latchedTime);
 
-            bufferCopy->writeToBag(bag);
-            bag.close();
+            bufferCopy->writeToBag(writer, metaData);
+            writer.close();
         }
         catch (const std::exception& e)
         {
@@ -158,13 +200,15 @@ void Snapshotter::writeBagFile(const std::string& path, BagCompression compressi
     }
 }
 
-void Snapshotter::topicCB(const ros::MessageEvent<ShapeShifterMsg>& msg)
+void Snapshotter::topicCB(const SerializedMsgPtr& msg, const TopicMetadata& md)
 {
+    // get time before we aquire the lock, might be more accurate
+    rclcpp::Time curTime = nh.now();
     // multiple threads may work on the buffer at the same time
     // as long as no thread is trying to write the buffer to disk
     std::shared_lock lock(writeBagLock);
 
-    buffer.push(std::move(msg.getConstMessage()), msg.getReceiptTime());
+    buffer.push(msg, curTime, md);
 }
 
 void Snapshotter::messageDroppedFromBufferCB(BufferEntry&& entry)
@@ -180,8 +224,13 @@ void Snapshotter::messageDroppedFromBufferCB(BufferEntry&& entry)
      *  timestamp of old latched messages).
      */
 
-    // NOTE getLatching call does a map lookup. if we need to call this more than once we should buffer
-    if (entry.msg->getLatching())
+    bool isLatched = false;
+    {
+        std::lock_guard l(metaDataLock);
+        isLatched = topicMetadata[entry.topicMetaDataIdx].transient_local;
+    }
+
+    if (isLatched)
     {
         /** In very rare cases newer messages might end up in the lastDroppedLatchedMsgs before older ones.
          *  To avoid overwriting them we keep the newer one inside the buffer.
