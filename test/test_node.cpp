@@ -1,16 +1,15 @@
 
+#include "Common.hpp"
+#include "Snapshotter.hpp"
+#include <filesystem>
 #include <gtest/gtest.h>
-#include <std_msgs/Bool.h>
-#include <std_msgs/Float32MultiArray.h>
-#include <std_msgs/String.h>
-#include <std_msgs/Int32.h>
 #include <ros/ros.h>
 #include <rosbag/bag.h>
 #include <rosbag/view.h>
-#include <filesystem>
-#include "Snapshotter.hpp"
-#include "Common.hpp"
-
+#include <std_msgs/Bool.h>
+#include <std_msgs/Float32MultiArray.h>
+#include <std_msgs/Int32.h>
+#include <std_msgs/String.h>
 
 #define LOG_PATH "/tmp/snapshotter_tests"
 
@@ -19,10 +18,9 @@ using namespace snapshotter;
 
 ros::NodeHandle* handle;
 
-
 void spin(size_t n)
 {
-    for(size_t i = 0; i < n; i++)
+    for (size_t i = 0; i < n; i++)
     {
         ros::spinOnce();
     }
@@ -30,10 +28,9 @@ void spin(size_t n)
 
 void clearLogFolder()
 {
-    for(const auto& entry : fs::directory_iterator(LOG_PATH))
+    for (const auto& entry : fs::directory_iterator(LOG_PATH))
     {
-        if(entry.status().type() == fs::file_type::regular &&
-           entry.path().extension().string() == ".bag")
+        if (entry.status().type() == fs::file_type::regular && entry.path().extension().string() == ".bag")
         {
             fs::remove(entry.path());
         }
@@ -43,10 +40,9 @@ void clearLogFolder()
 int getLogFileCount()
 {
     int count = 0;
-    for(const auto& entry : fs::directory_iterator(LOG_PATH))
+    for (const auto& entry : fs::directory_iterator(LOG_PATH))
     {
-        if(entry.status().type() == fs::file_type::regular &&
-           entry.path().extension().string() == ".bag")
+        if (entry.status().type() == fs::file_type::regular && entry.path().extension().string() == ".bag")
         {
             count++;
         }
@@ -81,22 +77,22 @@ struct DataPublisher
     /** spin until everything has been published */
     void spin()
     {
-        while(!done())
+        while (!done())
         {
             ros::spinOnce();
         }
 
-        //spin some more to make sure that everything has really been published.
-        for(int i = 0; i < 10; i++)
+        // spin some more to make sure that everything has really been published.
+        for (int i = 0; i < 10; i++)
         {
             ros::spinOnce();
             ros::Duration(0.001).sleep();
         }
     }
 
-    void publish(const ros::TimerEvent& )
+    void publish(const ros::TimerEvent&)
     {
-        if(done())
+        if (done())
         {
             pubTimer.stop();
             return;
@@ -121,10 +117,7 @@ struct DataPublisher
         pubCount++;
     }
 
-    bool done()
-    {
-        return pubCount >= 1000;
-    }
+    bool done() { return pubCount >= 1000; }
 
     /**if @p partialBag is true this will only check the pattern and not the count */
     void checkBoolMsgs(const std::string& bagFile, bool partialBag)
@@ -133,16 +126,16 @@ struct DataPublisher
         rosbag::View view(bag);
         bool lastBool = false;
         size_t boolCount = 0;
-        for(auto it = view.begin(); it != view.end(); it++)
+        for (auto it = view.begin(); it != view.end(); it++)
         {
             const std::string topic = it->getTopic();
-            if(topic == "/test_bool")
+            if (topic == "/test_bool")
             {
                 std_msgs::Bool::ConstPtr s = it->instantiate<std_msgs::Bool>();
 
-                //if we start somewhere inside the bag we need to know the initial value
-                //to check the pattern
-                if(partialBag && boolCount == 0)
+                // if we start somewhere inside the bag we need to know the initial value
+                // to check the pattern
+                if (partialBag && boolCount == 0)
                 {
                     lastBool = s->data;
                 }
@@ -152,7 +145,7 @@ struct DataPublisher
                 boolCount++;
             }
         }
-        if(!partialBag)
+        if (!partialBag)
         {
             ASSERT_EQ(boolCount, boolPubCount);
         }
@@ -166,14 +159,14 @@ struct DataPublisher
         size_t lastFloatArraySize = 1;
         size_t floatCount = 0;
 
-        for(auto it = view.begin(); it != view.end(); it++)
+        for (auto it = view.begin(); it != view.end(); it++)
         {
             const std::string topic = it->getTopic();
-            if(topic == "/test_float")
+            if (topic == "/test_float")
             {
                 std_msgs::Float32MultiArray::ConstPtr f = it->instantiate<std_msgs::Float32MultiArray>();
 
-                if(partialBag && floatCount == 0)
+                if (partialBag && floatCount == 0)
                 {
                     lastFloatArraySize = f->data.size();
                 }
@@ -181,7 +174,7 @@ struct DataPublisher
                 ASSERT_EQ(lastFloatArraySize, f->data.size());
                 lastFloatArraySize++;
                 float value = 1.0;
-                for(float data : f->data)
+                for (float data : f->data)
                 {
                     ASSERT_EQ(value, data);
                     value += 1.0;
@@ -189,7 +182,7 @@ struct DataPublisher
                 floatCount++;
             }
         }
-        if(!partialBag)
+        if (!partialBag)
         {
             ASSERT_EQ(floatCount, floatPubCount);
         }
@@ -210,7 +203,6 @@ struct DataPublisher
     ros::NodeHandle& nh;
 };
 
-
 TEST(TestSuite, SimpleTest)
 {
     clearLogFolder();
@@ -221,30 +213,27 @@ TEST(TestSuite, SimpleTest)
     snapshotter.subscribe("test_bool");
     snapshotter.subscribe("test_float");
 
-    //create the publisher after subscribing, otherwise we might miss the first messages
+    // create the publisher after subscribing, otherwise we might miss the first messages
     DataPublisher pub(*handle);
 
-    //spin until both subscribers are connected. This is important, otherwise
-    //we might miss the first few messages (which would cause the test to fail)
-    while(pub.boolPub.getNumSubscribers() == 0 || pub.floatPub.getNumSubscribers() == 0)
+    // spin until both subscribers are connected. This is important, otherwise
+    // we might miss the first few messages (which would cause the test to fail)
+    while (pub.boolPub.getNumSubscribers() == 0 || pub.floatPub.getNumSubscribers() == 0)
     {
         spin(10);
     }
 
-    //publish everything and wait for the publisher to finish
+    // publish everything and wait for the publisher to finish
     pub.run();
 
     const std::string file = getLogFileName();
     snapshotter.writeBagFile(file, BagCompression::NONE);
 
-
     pub.checkBoolMsgs(file, false);
     pub.checkFloatMsgs(file, false);
 
-
     clearLogFolder();
 }
-
 
 TEST(TestSuite, DropAllMsgs)
 {
@@ -258,15 +247,14 @@ TEST(TestSuite, DropAllMsgs)
     snapshotter.subscribe("test_bool");
     snapshotter.subscribe("test_float");
 
-    //spin until both subscribers are connected. This is important, otherwise
-    //we might miss the first few messages (which would cause the test to fail)
-    while(pub.boolPub.getNumSubscribers() == 0 || pub.floatPub.getNumSubscribers() == 0)
+    // spin until both subscribers are connected. This is important, otherwise
+    // we might miss the first few messages (which would cause the test to fail)
+    while (pub.boolPub.getNumSubscribers() == 0 || pub.floatPub.getNumSubscribers() == 0)
     {
         spin(10);
     }
 
     pub.run();
-
 
     const std::string file = getLogFileName();
     snapshotter.writeBagFile(file, BagCompression::NONE);
@@ -276,7 +264,6 @@ TEST(TestSuite, DropAllMsgs)
 
     clearLogFolder();
 }
-
 
 TEST(TestSuite, DropSomeMsgs)
 {
@@ -289,17 +276,17 @@ TEST(TestSuite, DropSomeMsgs)
     snapshotter.subscribe("test_bool");
     snapshotter.subscribe("test_float");
 
-    //create the publisher after subscribing, otherwise we might miss the first messages
+    // create the publisher after subscribing, otherwise we might miss the first messages
     DataPublisher pub(*handle);
 
-    //spin until both subscribers are connected. This is important, otherwise
-    //we might miss the first few messages (which would cause the test to fail)
-    while(pub.boolPub.getNumSubscribers() == 0 || pub.floatPub.getNumSubscribers() == 0)
+    // spin until both subscribers are connected. This is important, otherwise
+    // we might miss the first few messages (which would cause the test to fail)
+    while (pub.boolPub.getNumSubscribers() == 0 || pub.floatPub.getNumSubscribers() == 0)
     {
         spin(10);
     }
 
-    //publish everything and wait for the publisher to finish
+    // publish everything and wait for the publisher to finish
     pub.run();
 
     const std::string file = getLogFileName();
@@ -309,14 +296,11 @@ TEST(TestSuite, DropSomeMsgs)
     rosbag::View view(bag);
     ASSERT_NE(view.size(), pub.boolPubCount + pub.floatPubCount);
 
-
     pub.checkBoolMsgs(file, true);
     pub.checkFloatMsgs(file, true);
 
-
     clearLogFolder();
 }
-
 
 TEST(TestSuite, Latched)
 {
@@ -335,9 +319,9 @@ TEST(TestSuite, Latched)
     DataPublisher pub(*handle);
     ros::Publisher latchedPub = handle->advertise<std_msgs::Int32>("test_latched", 5, true);
 
-    //spin until subscribers are connected.
-    while(pub.boolPub.getNumSubscribers() == 0 || pub.floatPub.getNumSubscribers() == 0 ||
-          latchedPub.getNumSubscribers() == 0)
+    // spin until subscribers are connected.
+    while (pub.boolPub.getNumSubscribers() == 0 || pub.floatPub.getNumSubscribers() == 0 ||
+           latchedPub.getNumSubscribers() == 0)
     {
         spin(10);
     }
@@ -346,8 +330,8 @@ TEST(TestSuite, Latched)
     latchedMsg.data = 42;
     latchedPub.publish(latchedMsg);
 
-    //spam the snapshotter with data until we are sure that the latched message would have been dropped
-    //if it would not have been latched
+    // spam the snapshotter with data until we are sure that the latched message would have been dropped
+    // if it would not have been latched
     pub.run();
 
     const std::string file = getLogFileName();
@@ -356,10 +340,10 @@ TEST(TestSuite, Latched)
     rosbag::Bag bag(file);
     rosbag::View view(bag);
     bool msgFound = false;
-    for(auto it = view.begin(); it != view.end(); it++)
+    for (auto it = view.begin(); it != view.end(); it++)
     {
         const std::string topic = it->getTopic();
-        if(topic == "/test_latched")
+        if (topic == "/test_latched")
         {
             msgFound = true;
             std_msgs::Int32::ConstPtr s = it->instantiate<std_msgs::Int32>();
@@ -369,19 +353,17 @@ TEST(TestSuite, Latched)
     ASSERT_TRUE(msgFound);
 }
 
-
 // Run all the tests that were declared with TEST()
-int main(int argc, char **argv)
+int main(int argc, char** argv)
 {
     testing::InitGoogleTest(&argc, argv);
     ros::init(argc, argv, "snapshotter_2_tester");
     ros::NodeHandle nh;
     handle = &nh;
 
-
     // //create log folder
     const fs::path p(LOG_PATH);
-    if(!fs::exists(p))
+    if (!fs::exists(p))
     {
         fs::create_directories(p);
     }

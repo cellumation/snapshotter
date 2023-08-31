@@ -1,6 +1,5 @@
 <launch>
-  <node name="snapshotter" pkg="snapshotter" type="snapshotter_node" output="screen" respawn="true">
-        <rosparam command="load" file="$(find snapshotter)/config/example_config.yaml" />
+  <node pkg="snapshotter" exec="snapshotter_node" respawn="true">
+    <param from="$(find-pkg-share snapshotter)/config/example_config.yaml"/>
   </node>
-
 </launch>

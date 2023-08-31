@@ -33,7 +33,7 @@
  ********************************************************************/
 #pragma once
 
-#include <boost/regex.hpp>
+#include <regex>
 #include <string>
 #include <vector>
 
@@ -42,8 +42,8 @@ namespace snapshotter
 class TopicFilter
 {
 private:
-    std::vector<boost::regex> excludeRegexps;
-    std::vector<boost::regex> includeRegexps;
+    std::vector<std::regex> excludeRegexps;
+    std::vector<std::regex> includeRegexps;
 
 public:
     TopicFilter(const std::vector<std::string>& excludeRegexps, const std::vector<std::string>& includeRegexps);

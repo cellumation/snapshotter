@@ -34,11 +34,9 @@
 #pragma once
 #include "Common.hpp"
 #include "MessageRingBuffer.hpp"
-#include "ShapeShifterMsg.hpp"
 #include "SingleMessageBuffer.hpp"
-#include <ros/ros.h>
+#include <rclcpp/node.hpp>
 #include <shared_mutex>
-#include <topic_tools/shape_shifter.h>
 #include <unordered_set>
 #include <vector>
 
@@ -57,7 +55,7 @@ public:
         bool niceOnWrite;
     };
 
-    Snapshotter(ros::NodeHandle& nh, const Config& cfg);
+    Snapshotter(rclcpp::Node& nh, const Config& cfg);
 
     /** The snapshotter will subscribe to the given @p topic and log it.
      *  If the topic is already subscribed nothing will happen. */
@@ -68,18 +66,23 @@ public:
     void writeBagFile(const std::string& path, BagCompression compression);
 
 private:
-    void topicCB(const ros::MessageEvent<ShapeShifterMsg>& msg);
+    void topicCB(const SerializedMsgPtr& msg, const TopicMetadata& md);
 
     /** is invoked every time a message is dropped from the MessageRingBuffer */
     void messageDroppedFromBufferCB(BufferEntry&& entry);
 
-    ros::NodeHandle& nh;
+    rclcpp::Node& nh;
     Config cfg;
-    std::vector<ros::Subscriber> subscribers;
+    std::vector<rclcpp::SubscriptionBase::SharedPtr> subscribers;
     std::unordered_set<std::string> subscribedTopics;
     MessageRingBuffer buffer;
     SingleMessageBuffer lastDroppedLatchedMsgs;
     std::shared_mutex writeBagLock;
+
+    std::mutex metaDataLock;
+    std::vector<TopicMetadata> topicMetadata;
+
+    rclcpp::Logger log;
 };
 
 } // namespace snapshotter

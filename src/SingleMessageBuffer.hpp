@@ -37,9 +37,9 @@
 #include <string>
 #include <unordered_map>
 
-namespace rosbag
+namespace rosbag2_cpp
 {
-class Bag;
+class Writer;
 }
 
 namespace snapshotter
@@ -61,11 +61,11 @@ public:
      *  @param rewriteTimestamp All messages will use this timestamp as receivedTime inside the bag
      *  @throw BagWriteException in case of error
      *  is thread-safe */
-    void writeToBag(rosbag::Bag& bag, ros::Time rewriteTimestamp) const;
+    void writeToBag(rosbag2_cpp::Writer& writer, const std::vector<TopicMetadata>& topicMetadata,
+                    rclcpp::Time rewriteTimestamp) const;
 
 private:
-    using TopicName = std::string;
-    std::unordered_map<TopicName, BufferEntry> messages;
+    std::unordered_map<uint16_t, BufferEntry> messages;
     mutable std::mutex messagesLock;
 };
 

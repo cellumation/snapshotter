@@ -33,34 +33,36 @@
  ********************************************************************/
 
 #include "TopicFilter.hpp"
-#include <ros/console.h>
+#include <rclcpp/logging.hpp>
+#include <regex>
 
 namespace snapshotter
 {
 TopicFilter::TopicFilter(const std::vector<std::string>& excludeRegexps_,
                          const std::vector<std::string>& includeRegexps_)
 {
+    auto log = rclcpp::get_logger("snapshotter");
     for (const std::string& regexp : excludeRegexps_)
     {
         excludeRegexps.emplace_back(regexp);
-        ROS_INFO_STREAM("Excluding topic: " << regexp);
+        RCLCPP_INFO_STREAM(log, "Excluding topic: " << regexp);
     }
     for (const std::string& regexp : includeRegexps_)
     {
         includeRegexps.emplace_back(regexp);
-        ROS_INFO_STREAM("Including topic: " << regexp);
+        RCLCPP_INFO_STREAM(log, "Including topic: " << regexp);
     }
 }
 
 bool TopicFilter::exclude(const std::string& topic) const
 {
-    for (const boost::regex& er : excludeRegexps)
+    for (const std::regex& er : excludeRegexps)
     {
-        if (boost::regex_match(topic, er))
+        if (std::regex_match(topic, er))
         {
-            for (const boost::regex& ir : includeRegexps)
+            for (const std::regex& ir : includeRegexps)
             {
-                if (boost::regex_match(topic, ir))
+                if (std::regex_match(topic, ir))
                 {
                     return false;
                 }

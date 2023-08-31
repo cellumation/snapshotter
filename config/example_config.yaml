@@ -1,25 +1,30 @@
-num_threads: 4
+snapshotter:
+    ros__parameters:
+        num_threads: 4
 
-# Maximum memory to be used for buffering by the snapshotter (in mb)
-# The snapshotter will take at least max_memory_mb of additional
-# memory while writing a snapshot to disk!
-max_memory_mb: 5000
+        # Maximum memory to be used for buffering by the snapshotter (in mb)
+        # The snapshotter will take at least max_memory_mb of additional
+        # memory while writing a snapshot to disk!
+        max_memory_mb: 5000
 
-# allowed values for bag_compression are "none", "slow", "fast"
-# "none" = no compression, largest file size but very fast writing
-# "slow" = best compression, smallest file size but takes a lot of time to write
-# "fast" = some compression, medium file size but reasonably fast
-bag_compression: "fast"
+        # allowed values for bag_compression are "none", "slow", "fast"
+        # "none" = no compression, largest file size but very fast writing
+        # "slow" = best compression, smallest file size but takes a lot of time to write
+        # "fast" = some compression, medium file size but reasonably fast
+        bag_compression: "fast"
 
-# If true the snapshotter will switch the nice value of the thread that is
-# writing a bag file to disk to 19. I.e. the thread will yield to everyone
-# with a higher priority. This enables writing to disk without interrupting
-# other processes.
-nice_on_write: True
+        # If true the snapshotter will switch the nice value of the thread that is
+        # writing a bag file to disk to 19. I.e. the thread will yield to everyone
+        # with a higher priority. This enables writing to disk without interrupting
+        # other processes.
+        nice_on_write: True
 
-# A list of regexes that should be excluded from logging. Every topic that
-# matches a regex in this list is not logged.
-exclude_topics:
-  - /vision/camera_\d+/depth/.*
-  - /some/other/topic
-  - /or/some/other/regexp.*
+        # A list of regexes that should be excluded from logging. Every topic that
+        # matches a regex in this list is not logged.
+        exclude_topics:
+        - /vision/camera_\d+/depth/.*
+        - /some/other/topic
+        - /or/some/other/regexp.*
+
+        # A list of regexes that should be include even though it matches the exclude pattern.
+        #include_topics: []
