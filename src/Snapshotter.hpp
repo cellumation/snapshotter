@@ -59,7 +59,7 @@ public:
 
     /** The snapshotter will subscribe to the given @p topic and log it.
      *  If the topic is already subscribed nothing will happen. */
-    void subscribe(const std::string& topic);
+    bool subscribe(const std::string& topic);
 
     /**Stops recording, writes the bag and restarts recording
      * @throw BagWriteException in case of error */
