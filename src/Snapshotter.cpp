@@ -46,7 +46,7 @@ Snapshotter::Snapshotter(rclcpp::Node& nh, const Snapshotter::Config& cfg) :
     log(nh.get_logger())
 {}
 
-void Snapshotter::subscribe(const std::string& topic)
+bool Snapshotter::subscribe(const std::string& topic)
 {
     if (subscribedTopics.find(topic) == subscribedTopics.end())
     {
@@ -77,7 +77,7 @@ void Snapshotter::subscribe(const std::string& topic)
         if (!md)
         {
             RCLCPP_ERROR_STREAM_ONCE(log, "Error, could not retreive endpoint information for topic " << topic);
-            return;
+            return false;
         }
 
         RCLCPP_INFO_STREAM(log, "Subscribing to: " << topic);
@@ -101,6 +101,8 @@ void Snapshotter::subscribe(const std::string& topic)
         subscribers.push_back(sub);
         subscribedTopics.emplace(topic);
     }
+
+    return true;
 }
 
 void Snapshotter::writeBagFile(const std::string& path, BagCompression /*compression*/)

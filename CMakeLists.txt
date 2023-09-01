@@ -13,7 +13,6 @@ find_package(rosbag2_cpp REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(rosidl_default_generators REQUIRED)
 
-
 rosidl_generate_interfaces(
     ${PROJECT_NAME}
     srv/TakeSnapshot.srv
@@ -51,5 +50,17 @@ install(TARGETS ${PROJECT_NAME}_node RUNTIME DESTINATION lib/${PROJECT_NAME})
 
 install(DIRECTORY launch DESTINATION share/${PROJECT_NAME})
 install(DIRECTORY config DESTINATION share/${PROJECT_NAME})
+
+#############
+## Testing ##
+#############
+if(BUILD_TESTING)
+    find_package(ament_cmake_gtest REQUIRED)
+
+    ament_add_gtest(utest test/test.test test/test_node.cpp)
+    target_include_directories(utest PRIVATE src)
+
+    target_link_libraries(utest ${PROJECT_NAME}_lib)
+endif()
 
 ament_package()
