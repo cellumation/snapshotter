@@ -36,6 +36,7 @@
 #include "TopicFilter.hpp"
 
 #include <rclcpp/executors.hpp>
+#include <rclcpp/logging.hpp>
 #include <rclcpp/node.hpp>
 #include <snapshotter/srv/take_snapshot.hpp>
 
@@ -73,9 +74,57 @@ int main(int argc, char** argv)
 
     rclcpp::Node nh("snapshotter", ops);
 
-    std::vector<std::string> excludeRegexes = nh.get_parameter("exclude_topics").as_string_array();
-    std::vector<std::string> includeRegexes; // = nh.get_parameter("include_topics").as_string_array();
+    auto checkParameter = [&nh](const std::string& name, bool optional) {
+        if (!nh.has_parameter(name))
+        {
+            if (optional)
+            {
+                RCLCPP_WARN_STREAM(nh.get_logger(), "Parameter " << name << " not set");
+                return true;
+            }
+            RCLCPP_ERROR_STREAM(nh.get_logger(), "Parameter " << name << " not set");
+            return false;
+        }
+        return true;
+    };
+
+    bool allParamsSet = true;
+
+    allParamsSet &= checkParameter("max_memory_mb", false);
+    allParamsSet &= checkParameter("nice_on_write", false);
+    allParamsSet &= checkParameter("exclude_topics", true);
+    allParamsSet &= checkParameter("include_topics", true);
+    allParamsSet &= checkParameter("bag_compression", false);
+    allParamsSet &= checkParameter("process_frequency", false);
+
+    if (!allParamsSet)
+    {
+        return EXIT_FAILURE;
+    }
+
+    for (auto p : nh.list_parameters({}, 5).names)
+    {
+        RCLCPP_INFO_STREAM(nh.get_logger(), "Found parameter " << p);
+    }
+
+    std::vector<std::string> excludeRegexes;
+    if (nh.has_parameter("exclude_topics"))
+    {
+        excludeRegexes = nh.get_parameter("exclude_topics").as_string_array();
+    }
+    std::vector<std::string> includeRegexes;
+    if (nh.has_parameter("include_topics"))
+    {
+        includeRegexes = nh.get_parameter("include_topics").as_string_array();
+    }
     TopicFilter topicFilter(excludeRegexes, includeRegexes);
+
+    double processFrequency = nh.get_parameter("process_frequency").as_double();
+
+    if (processFrequency <= 0)
+    {
+        throw std::runtime_error("Parameter 'process_frequency' must be > 0");
+    }
 
     Snapshotter::Config cfg;
 
@@ -142,15 +191,17 @@ int main(int argc, char** argv)
         };
     auto service = nh.create_service<snapshotter::srv::TakeSnapshot>("take_snapshot", takeSnapshotCb);
 
-    int numThreads = nh.get_parameter("num_threads").as_int();
-
-    if (numThreads <= 0)
-    {
-        throw std::runtime_error("Parameter 'num_threads' needs to be >= 1");
-    }
-
-    rclcpp::executors::MultiThreadedExecutor executor(rclcpp::ExecutorOptions(), numThreads);
+    rclcpp::executors::SingleThreadedExecutor executor;
     executor.add_node(nh.get_node_base_interface());
-    executor.spin();
+
+    while (rclcpp::ok())
+    {
+        rclcpp::WallRate processRate(processFrequency);
+
+        // procesds all available events and return
+        executor.spin_once();
+
+        processRate.sleep();
+    }
     return 0;
 }
