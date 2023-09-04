@@ -33,6 +33,7 @@
  ********************************************************************/
 #include "Snapshotter.hpp"
 #include <cerrno>
+#include <rosbag2_compression/sequential_compression_writer.hpp>
 #include <rosbag2_cpp/writer.hpp>
 #include <sys/resource.h>
 #include <thread>
@@ -105,24 +106,40 @@ bool Snapshotter::subscribe(const std::string& topic)
     return true;
 }
 
-void Snapshotter::writeBagFile(const std::string& path, BagCompression /*compression*/)
+void Snapshotter::writeBagFile(const std::string& path, BagCompression compression)
 {
     using namespace rosbag2_cpp;
-    rosbag2_cpp::Writer writer;
 
-    //     switch (compression)
-    //     {
-    //         case BagCompression::FAST:
-    //             bag.setCompression(CompressionType::LZ4);
-    //             break;
-    //         case BagCompression::SLOW:
-    //             bag.setCompression(CompressionType::BZ2);
-    //             break;
-    //         case BagCompression::NONE:
-    //             break;
-    //         default:
-    //             throw BagWriteException("Unhandled enum value");
-    //     }
+    std::unique_ptr<rosbag2_cpp::writer_interfaces::BaseWriterInterface> writerImpl;
+
+    switch (compression)
+    {
+        case BagCompression::FAST:
+        {
+            rosbag2_compression::CompressionOptions ops;
+            ops.compression_mode = rosbag2_compression::CompressionMode::MESSAGE;
+            ops.compression_format = "zstd";
+            ops.thread_nice_value = 19;
+            writerImpl = std::make_unique<rosbag2_compression::SequentialCompressionWriter>(ops);
+        }
+        break;
+        case BagCompression::SLOW:
+        {
+            rosbag2_compression::CompressionOptions ops;
+            ops.compression_mode = rosbag2_compression::CompressionMode::FILE;
+            ops.compression_format = "zstd";
+            ops.thread_nice_value = 19;
+            writerImpl = std::make_unique<rosbag2_compression::SequentialCompressionWriter>(ops);
+        }
+        break;
+        case BagCompression::NONE:
+            writerImpl = std::make_unique<writers::SequentialWriter>();
+            break;
+        default:
+            throw BagWriteException("Unhandled enum value");
+    }
+
+    rosbag2_cpp::Writer writer(std::move(writerImpl));
 
     std::unique_ptr<MessageRingBuffer> bufferCopy;
     std::unique_ptr<SingleMessageBuffer> latchedBufferCopy;
@@ -144,61 +161,28 @@ void Snapshotter::writeBagFile(const std::string& path, BagCompression /*compres
     // from that buffer would end up in the original lastDroppedLatchedMsgs buffer.
     bufferCopy->setDroppedCb([](BufferEntry&&) {});
 
-    // writing is done in a seperate thread because errors might happen
-    // during writing and there is no guaranteed way to reset the
-    // thread priority once an error occurred. If we would use one
-    // of the ros threads we would leave a ros thread with very low
-    // priority behind in case of error.
-    // Even with perfect error handling the call to reset the
-    // priority could still fail (and in fact did fail on my machine).
-    // Thus it is much easier and safer to spawn a new thread and let
-    // it die once we are done writing.
-    std::exception_ptr ex = nullptr;
-    std::thread t([&] {
-        try
-        {
-            if (cfg.niceOnWrite)
-            {
-                // according to posix this sets the nice value for the whole process
-                // but in reality this sets the thread priority on linux.
-                // There does not seem to be any other way to set the thread priority on
-                // a non-realtime kernel :-(
-                // https://stackoverflow.com/questions/10876342/equivalent-of-setthreadpriority-on-linux-pthreads
-                if (0 != setpriority(PRIO_PROCESS, 0, 19))
-                {
-                    const std::string msg = "setpriority failed: " + std::string(std::strerror(errno));
-                    RCLCPP_ERROR_STREAM(log, msg);
-                    ex = std::make_exception_ptr(BagWriteException(msg));
-                    return;
-                }
-            }
-            writer.open(path);
-            /** write all old latched messages 3 seconds before the actual log starts.
-             *  The value 3 is arbitrary. The idea is to make the old latched messages stand out
-             *  to a human reader when looking at the bag. We do the calculation in double because rclcpp::Time will
-             * throw when the time becomes negative (which can happen when running in simulation because sim time starts
-             * at 0) */
-            rclcpp::Time latchedTime = bufferCopy->getOldestReceiveTime() - std::chrono::seconds(3);
-            latchedTime = std::max(latchedTime, rclcpp::Time(static_cast<int64_t>(0), RCL_ROS_TIME));
-            latchedBufferCopy->writeToBag(writer, metaData, latchedTime);
-
-            bufferCopy->writeToBag(writer, metaData);
-            writer.close();
-        }
-        catch (const std::exception& e)
-        {
-            ex = std::make_exception_ptr(BagWriteException(e.what()));
-        }
-        catch (...) // we really really don't want to crash :D
-        {
-            ex = std::make_exception_ptr(BagWriteException("unknown error"));
-        }
-    });
-    t.join();
-
-    if (ex)
+    try
     {
-        std::rethrow_exception(ex);
+        writer.open(path);
+        /** write all old latched messages 3 seconds before the actual log starts.
+         *  The value 3 is arbitrary. The idea is to make the old latched messages stand out
+         *  to a human reader when looking at the bag. We do the calculation in double because rclcpp::Time will
+         * throw when the time becomes negative (which can happen when running in simulation because sim time starts
+         * at 0) */
+        rclcpp::Time latchedTime = bufferCopy->getOldestReceiveTime() - std::chrono::seconds(3);
+        latchedTime = std::max(latchedTime, rclcpp::Time(static_cast<int64_t>(0), RCL_ROS_TIME));
+        latchedBufferCopy->writeToBag(writer, metaData, latchedTime);
+
+        bufferCopy->writeToBag(writer, metaData);
+        writer.close();
+    }
+    catch (const std::exception& e)
+    {
+        throw BagWriteException(e.what());
+    }
+    catch (...) // we really really don't want to crash :D
+    {
+        throw BagWriteException("unknown error");
     }
 }
 

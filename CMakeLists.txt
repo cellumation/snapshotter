@@ -10,6 +10,7 @@ add_compile_options(-Wall -Wextra -Werror)
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(rosbag2_cpp REQUIRED)
+find_package(rosbag2_compression REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(rosidl_default_generators REQUIRED)
 
@@ -34,7 +35,7 @@ target_link_libraries(
     ${PROJECT_NAME}_lib
     PUBLIC ${cpp_typesupport_target}
 )
-ament_target_dependencies(${PROJECT_NAME}_lib PUBLIC rclcpp rosbag2_cpp)
+ament_target_dependencies(${PROJECT_NAME}_lib PUBLIC rclcpp rosbag2_cpp rosbag2_compression)
 
 add_executable(${PROJECT_NAME}_node src/main.cpp)
 target_link_libraries(${PROJECT_NAME}_node
