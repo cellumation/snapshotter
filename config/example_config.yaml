@@ -6,7 +6,7 @@ snapshotter:
         # they are coupled to the time of processing.
         # A higher frequency results in more CPU load so this parameter controls
         # the tradeoff between the accuracy of the timestamps vs the CPU load.
-        process_frequency: 400.0
+        process_frequency: 1000.0
 
         # Maximum memory to be used for buffering by the snapshotter (in mb)
         # The snapshotter will take at least max_memory_mb of additional
