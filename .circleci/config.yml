@@ -8,26 +8,20 @@ workflows:
 jobs:
   build-ros-componenet:
     docker:
-      - image: ros:noetic-ros-base-focal
+      - image: ros:iron-ros-base-jammy
     working_directory: /ws/src
     steps:
-      - run:
-          name: "install required tools"
-          command: |
-            apt-get update
-            apt-get install -y --no-install-recommends git python3-catkin-tools
       - run:
           name: "create workspace"
           command: "mkdir -p /ws/src"
       - run:
           name: "checkout via https"
           working_directory: "/ws/src"
-          command: "git clone https://github.com/cellumation/snapshotter.git"
+          command: "git clone https://github.com/cellumation/snapshotter.git -b $CIRCLE_BRANCH"
       - run:
           name: "build snapshotter"
-          working_directory: /ws
+          working_directory: /ws/src/snapshotter
           command: |
-            catkin init -w .
-            catkin config --extend /opt/ros/noetic
-            catkin build
-            catkin test
+            source /opt/ros/iron/setup.bash
+            colcon build
+            colcon test
