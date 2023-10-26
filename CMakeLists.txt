@@ -33,9 +33,8 @@ add_library(${PROJECT_NAME}_lib OBJECT
 )
 target_link_libraries(
     ${PROJECT_NAME}_lib
-    PUBLIC ${cpp_typesupport_target}
+    PUBLIC ${cpp_typesupport_target} rclcpp::rclcpp rosbag2_cpp::rosbag2_cpp rosbag2_compression::rosbag2_compression
 )
-ament_target_dependencies(${PROJECT_NAME}_lib PUBLIC rclcpp rosbag2_cpp rosbag2_compression)
 
 add_executable(${PROJECT_NAME}_node src/main.cpp)
 target_link_libraries(${PROJECT_NAME}_node
@@ -48,7 +47,6 @@ target_link_libraries(${PROJECT_NAME}_node
 #############
 
 install(TARGETS ${PROJECT_NAME}_node RUNTIME DESTINATION lib/${PROJECT_NAME})
-
 install(DIRECTORY launch DESTINATION share/${PROJECT_NAME})
 install(DIRECTORY config DESTINATION share/${PROJECT_NAME})
 
