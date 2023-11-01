@@ -119,7 +119,6 @@ void Snapshotter::writeBagFile(const std::string& path, BagCompression compressi
             rosbag2_compression::CompressionOptions ops;
             ops.compression_mode = rosbag2_compression::CompressionMode::MESSAGE;
             ops.compression_format = "zstd";
-            ops.thread_nice_value = 19;
             writerImpl = std::make_unique<rosbag2_compression::SequentialCompressionWriter>(ops);
         }
         break;
@@ -128,7 +127,6 @@ void Snapshotter::writeBagFile(const std::string& path, BagCompression compressi
             rosbag2_compression::CompressionOptions ops;
             ops.compression_mode = rosbag2_compression::CompressionMode::FILE;
             ops.compression_format = "zstd";
-            ops.thread_nice_value = 19;
             writerImpl = std::make_unique<rosbag2_compression::SequentialCompressionWriter>(ops);
         }
         break;
@@ -161,28 +159,60 @@ void Snapshotter::writeBagFile(const std::string& path, BagCompression compressi
     // from that buffer would end up in the original lastDroppedLatchedMsgs buffer.
     bufferCopy->setDroppedCb([](BufferEntry&&) {});
 
-    try
-    {
-        writer.open(path);
-        /** write all old latched messages 3 seconds before the actual log starts.
-         *  The value 3 is arbitrary. The idea is to make the old latched messages stand out
-         *  to a human reader when looking at the bag. We do the calculation in double because rclcpp::Time will
-         * throw when the time becomes negative (which can happen when running in simulation because sim time starts
-         * at 0) */
-        rclcpp::Time latchedTime = bufferCopy->getOldestReceiveTime() - std::chrono::seconds(3);
-        latchedTime = std::max(latchedTime, rclcpp::Time(static_cast<int64_t>(0), RCL_ROS_TIME));
-        latchedBufferCopy->writeToBag(writer, metaData, latchedTime);
+    // writing is done in a seperate thread because errors might happen
+    // during writing and there is no guaranteed way to reset the
+    // thread priority once an error occurred. If we would use one
+    // of the ros threads we would leave a ros thread with very low
+    // priority behind in case of error.
+    // Even with perfect error handling the call to reset the
+    // priority could still fail (and in fact did fail on my machine).
+    // Thus it is much easier and safer to spawn a new thread and let
+    // it die once we are done writing.
+    std::exception_ptr ex = nullptr;
+    std::thread t([&] {
+        try
+        {
+            if (cfg.niceOnWrite)
+            {
+                // according to 'man setpriority' this call is not POSIX conform, and sets the priority
+                // for this thread and all of its child threads. This exactly what we want.
+                errno = 0;
+                if (0 != setpriority(PRIO_PROCESS, 0, 19) || errno != 0)
+                {
+                    const std::string msg = "setpriority failed: " + std::string(std::strerror(errno));
+                    RCLCPP_ERROR_STREAM(log, msg);
+                    ex = std::make_exception_ptr(BagWriteException(msg));
+                    return;
+                }
+            }
 
-        bufferCopy->writeToBag(writer, metaData);
-        writer.close();
-    }
-    catch (const std::exception& e)
+            writer.open(path);
+            /** write all old latched messages 3 seconds before the actual log starts.
+             *  The value 3 is arbitrary. The idea is to make the old latched messages stand out
+             *  to a human reader when looking at the bag. We do the calculation in double because rclcpp::Time will
+             * throw when the time becomes negative (which can happen when running in simulation because sim time starts
+             * at 0) */
+            rclcpp::Time latchedTime = bufferCopy->getOldestReceiveTime() - std::chrono::seconds(3);
+            latchedTime = std::max(latchedTime, rclcpp::Time(static_cast<int64_t>(0), RCL_ROS_TIME));
+            latchedBufferCopy->writeToBag(writer, metaData, latchedTime);
+
+            bufferCopy->writeToBag(writer, metaData);
+            writer.close();
+        }
+        catch (const std::exception& e)
+        {
+            ex = std::make_exception_ptr(BagWriteException(e.what()));
+        }
+        catch (...) // we really really don't want to crash :D
+        {
+            ex = std::make_exception_ptr(BagWriteException("unknown error"));
+        }
+    });
+    t.join();
+
+    if (ex)
     {
-        throw BagWriteException(e.what());
-    }
-    catch (...) // we really really don't want to crash :D
-    {
-        throw BagWriteException("unknown error");
+        std::rethrow_exception(ex);
     }
 }
 
