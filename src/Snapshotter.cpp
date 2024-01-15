@@ -119,6 +119,9 @@ void Snapshotter::writeBagFile(const std::string& path, BagCompression compressi
             rosbag2_compression::CompressionOptions ops;
             ops.compression_mode = rosbag2_compression::CompressionMode::MESSAGE;
             ops.compression_format = "zstd";
+            ops.compression_threads = 5;
+            ops.compression_queue_size =
+                0; // 0 means: never drop messages. If no free compression thread is available, wait
             writerImpl = std::make_unique<rosbag2_compression::SequentialCompressionWriter>(ops);
         }
         break;
@@ -127,6 +130,8 @@ void Snapshotter::writeBagFile(const std::string& path, BagCompression compressi
             rosbag2_compression::CompressionOptions ops;
             ops.compression_mode = rosbag2_compression::CompressionMode::FILE;
             ops.compression_format = "zstd";
+            ops.compression_threads = 5;
+            ops.compression_queue_size = 0; // as far as I understand this is not used in FILE compression mode
             writerImpl = std::make_unique<rosbag2_compression::SequentialCompressionWriter>(ops);
         }
         break;
