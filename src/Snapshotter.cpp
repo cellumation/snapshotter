@@ -33,8 +33,10 @@
  ********************************************************************/
 #include "Snapshotter.hpp"
 #include <cerrno>
+#include <chrono>
 #include <rosbag2_compression/sequential_compression_writer.hpp>
 #include <rosbag2_cpp/writer.hpp>
+#include <rosbag2_cpp/writers/sequential_writer.hpp>
 #include <sys/resource.h>
 #include <thread>
 
@@ -110,39 +112,32 @@ void Snapshotter::writeBagFile(const std::string& path, BagCompression compressi
 {
     using namespace rosbag2_cpp;
 
+    const auto startTime = std::chrono::steady_clock::now();
+
     std::unique_ptr<rosbag2_cpp::writer_interfaces::BaseWriterInterface> writerImpl;
+    writerImpl = std::make_unique<rosbag2_cpp::writers::SequentialWriter>();
+    rosbag2_cpp::Writer writer(std::move(writerImpl));
+
+    rosbag2_storage::StorageOptions storageOpts{};
+    storageOpts.uri = path;
 
     switch (compression)
     {
         case BagCompression::FAST:
         {
-            rosbag2_compression::CompressionOptions ops;
-            ops.compression_mode = rosbag2_compression::CompressionMode::MESSAGE;
-            ops.compression_format = "zstd";
-            ops.compression_threads = 5;
-            ops.compression_queue_size =
-                0; // 0 means: never drop messages. If no free compression thread is available, wait
-            writerImpl = std::make_unique<rosbag2_compression::SequentialCompressionWriter>(ops);
+            storageOpts.storage_preset_profile = "zstd_fast";
         }
         break;
         case BagCompression::SLOW:
         {
-            rosbag2_compression::CompressionOptions ops;
-            ops.compression_mode = rosbag2_compression::CompressionMode::FILE;
-            ops.compression_format = "zstd";
-            ops.compression_threads = 5;
-            ops.compression_queue_size = 0; // as far as I understand this is not used in FILE compression mode
-            writerImpl = std::make_unique<rosbag2_compression::SequentialCompressionWriter>(ops);
+            storageOpts.storage_preset_profile = "zstd_small";
         }
         break;
         case BagCompression::NONE:
-            writerImpl = std::make_unique<writers::SequentialWriter>();
             break;
         default:
             throw BagWriteException("Unhandled enum value");
     }
-
-    rosbag2_cpp::Writer writer(std::move(writerImpl));
 
     std::unique_ptr<MessageRingBuffer> bufferCopy;
     std::unique_ptr<SingleMessageBuffer> latchedBufferCopy;
@@ -191,7 +186,7 @@ void Snapshotter::writeBagFile(const std::string& path, BagCompression compressi
                 }
             }
 
-            writer.open(path);
+            writer.open(storageOpts);
             /** write all old latched messages 3 seconds before the actual log starts.
              *  The value 3 is arbitrary. The idea is to make the old latched messages stand out
              *  to a human reader when looking at the bag. We do the calculation in double because rclcpp::Time will
@@ -214,6 +209,10 @@ void Snapshotter::writeBagFile(const std::string& path, BagCompression compressi
         }
     });
     t.join();
+
+    const auto elapsedTime =
+        std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - startTime);
+    RCLCPP_INFO_STREAM(log, "Writing took: " << elapsedTime.count() << " ms");
 
     if (ex)
     {
