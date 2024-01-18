@@ -96,6 +96,7 @@ int main(int argc, char** argv)
     allParamsSet &= checkParameter("include_topics", true);
     allParamsSet &= checkParameter("bag_compression", false);
     allParamsSet &= checkParameter("process_frequency", false);
+    allParamsSet &= checkParameter("keep_latched", false);
 
     if (!allParamsSet)
     {
@@ -119,7 +120,7 @@ int main(int argc, char** argv)
     }
     TopicFilter topicFilter(excludeRegexes, includeRegexes);
 
-    double processFrequency = nh.get_parameter("process_frequency").as_double();
+    const double processFrequency = nh.get_parameter("process_frequency").as_double();
 
     if (processFrequency <= 0)
     {
@@ -128,6 +129,7 @@ int main(int argc, char** argv)
 
     Snapshotter::Config cfg;
 
+    cfg.keepLatched = nh.get_parameter("keep_latched").as_bool();
     int maxMemoryMb = nh.get_parameter("max_memory_mb").as_int();
     if (maxMemoryMb < 0)
     {

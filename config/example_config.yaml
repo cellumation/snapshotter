@@ -8,6 +8,11 @@ snapshotter:
         # the tradeoff between the accuracy of the timestamps vs the CPU load.
         process_frequency: 1000.0
 
+        # If true, the snapshotter will keep latched topics in memory until the
+        # snapshot is written to disk. This is useful if you want to log latched
+        # topics that are not published very often.
+        keep_latched: True
+
         # Maximum memory to be used for buffering by the snapshotter (in mb)
         # The snapshotter will take at least max_memory_mb of additional
         # memory while writing a snapshot to disk!
