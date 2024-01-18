@@ -198,9 +198,8 @@ int main(int argc, char** argv)
     {
         rclcpp::WallRate processRate(processFrequency);
 
-        // procesds all available events and return
-        executor.spin_once();
-
+        // process all available events and return
+        executor.spin_some();
         processRate.sleep();
     }
     return 0;
