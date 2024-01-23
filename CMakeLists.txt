@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.10)
 project(snapshotter)
 
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS ON)
 
@@ -11,6 +11,7 @@ find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(rosbag2_cpp REQUIRED)
 find_package(rosbag2_compression REQUIRED)
+find_package(rosbag2_transport REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(rosidl_default_generators REQUIRED)
 
@@ -33,7 +34,7 @@ add_library(${PROJECT_NAME}_lib OBJECT
 )
 target_link_libraries(
     ${PROJECT_NAME}_lib
-    PUBLIC ${cpp_typesupport_target} rclcpp::rclcpp rosbag2_cpp::rosbag2_cpp rosbag2_compression::rosbag2_compression
+    PUBLIC ${cpp_typesupport_target} rclcpp::rclcpp rosbag2_cpp::rosbag2_cpp rosbag2_compression::rosbag2_compression rosbag2_transport::rosbag2_transport
 )
 
 add_executable(${PROJECT_NAME}_node src/main.cpp)

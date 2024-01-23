@@ -70,7 +70,7 @@ void MessageRingBuffer::push(SerializedMsgPtr msg, const rclcpp::Time& receiveTi
     if (entrySize > maxSize)
     {
         rclcpp::Logger log = rclcpp::get_logger("snapshotter");
-        RCLCPP_WARN_STREAM(log, "Message from " << md.topicName << " is too large for buffer. Ignoring message");
+        RCLCPP_WARN_STREAM(log, "Message from " << md.rosMetadata.name << " is too large for buffer. Ignoring message");
         return;
     }
 
@@ -94,7 +94,7 @@ void MessageRingBuffer::push(SerializedMsgPtr msg, const rclcpp::Time& receiveTi
         else
         {
             rclcpp::Logger log = rclcpp::get_logger("snapshotter");
-            RCLCPP_ERROR_STREAM(log, "Message from " << md.topicName << " is too large for buffer");
+            RCLCPP_ERROR_STREAM(log, "Message from " << md.rosMetadata.name << " is too large for buffer");
         }
     }
 
@@ -107,22 +107,29 @@ void MessageRingBuffer::push(SerializedMsgPtr msg, const rclcpp::Time& receiveTi
 void MessageRingBuffer::writeToBag(rosbag2_cpp::Writer& writer, const std::vector<TopicMetadata>& topicMetadata) const
 {
     std::scoped_lock lock(bufferLock);
+
+    for (const BufferEntry& entry : buffer)
+    {
+        const TopicMetadata& md(topicMetadata[entry.topicMetaDataIdx]);
+        writer.create_topic(md.rosMetadata);
+    }
+
     for (const BufferEntry& entry : buffer)
     {
         const TopicMetadata& md(topicMetadata[entry.topicMetaDataIdx]);
         if (entry.receiveTime >= minValidTimeStamp)
         {
-            writer.write(entry.msg, md.topicName, md.topicTypeName, entry.receiveTime);
+            writer.write(entry.msg, md.rosMetadata.name, md.rosMetadata.type, entry.receiveTime);
         }
         else
         {
             // FIXME is this the workaround for the crash on time zero of rosbag1 ?
-            writer.write(entry.msg, md.topicName, md.topicTypeName, minValidTimeStamp);
+            writer.write(entry.msg, md.rosMetadata.name, md.rosMetadata.type, minValidTimeStamp);
 
             rclcpp::Logger log = rclcpp::get_logger("snapshotter");
             RCLCPP_WARN_STREAM(log,
                                "Message timestamp < rclcpp::Time(0). Replacing timestamp with rclcpp::Time(0). Topic:"
-                                   << md.topicName);
+                                   << md.rosMetadata.name);
         }
     }
 }

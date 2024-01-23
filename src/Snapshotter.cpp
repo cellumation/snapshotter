@@ -34,9 +34,11 @@
 #include "Snapshotter.hpp"
 #include <cerrno>
 #include <chrono>
-#include <rosbag2_compression/sequential_compression_writer.hpp>
+#include <rmw/rmw.h>
 #include <rosbag2_cpp/writer.hpp>
 #include <rosbag2_cpp/writers/sequential_writer.hpp>
+#include <rosbag2_transport/qos.hpp>
+#include <rosbag2_transport/recorder.hpp>
 #include <sys/resource.h>
 #include <thread>
 
@@ -49,57 +51,72 @@ Snapshotter::Snapshotter(rclcpp::Node& nh, const Snapshotter::Config& cfg) :
     log(nh.get_logger())
 {}
 
+/// dumps the qos profiles from all endpoints into a yaml node
+std::string convertOfferedQosToYaml(const std::vector<rclcpp::TopicEndpointInfo>& endpointInfos)
+{
+    YAML::Node yaml;
+    // FIXME this might create duplicate entries in the yaml file if multiple publishers offer the same qos profile.
+    //       This does not cause any problems when replaying the bag, but it is still ugly.
+    for (const auto& info : endpointInfos)
+    {
+        yaml.push_back(rosbag2_transport::Rosbag2QoS(info.qos_profile()));
+    }
+    return YAML::Dump(yaml);
+}
+
+std::string getTopicType(const std::vector<rclcpp::TopicEndpointInfo>& endpointInfos)
+{
+    std::string type = endpointInfos.front().topic_type();
+    for (const auto& info : endpointInfos)
+    {
+        if (type != info.topic_type())
+        {
+            throw std::runtime_error("Multiple publishers with different types for the same topic");
+        }
+    }
+    return type;
+}
+
 bool Snapshotter::subscribe(const std::string& topic)
 {
     if (subscribedTopics.find(topic) == subscribedTopics.end())
     {
-        std::optional<TopicMetadata> md;
-
         std::vector<rclcpp::TopicEndpointInfo> pubInfo = nh.get_publishers_info_by_topic(topic);
-        for (const rclcpp::TopicEndpointInfo& info : pubInfo)
+        if (pubInfo.empty())
         {
-            bool transientLocal = info.qos_profile().durability() == rclcpp::DurabilityPolicy::TransientLocal;
-
-            if (md)
-            {
-                if (md->topicTypeName != info.topic_type())
-                {
-                    RCLCPP_WARN_STREAM(log, "Error, node " << info.node_name()
-                                                           << " has different message type than previous nodes "
-                                                           << md->topicTypeName << " vs " << info.topic_type());
-                    continue;
-                }
-
-                // if any publisher is transient local, we subscribe as transient local
-                md->transient_local |= transientLocal;
-            }
-
-            md = TopicMetadata(topic, info.topic_type(), transientLocal, topicMetadata.size());
-        };
-
-        if (!md)
-        {
-            RCLCPP_ERROR_STREAM_ONCE(log, "Error, could not retreive endpoint information for topic " << topic);
+            RCLCPP_DEBUG_STREAM(log, "No publishers for topic: " << topic
+                                                                 << ". Skipping subscription and trying again later");
             return false;
         }
 
-        RCLCPP_INFO_STREAM(log, "Subscribing to: " << topic);
+        const rosbag2_storage::TopicMetadata rosMd{.name = topic,
+                                                   .type = getTopicType(pubInfo),
+                                                   .serialization_format = rmw_get_serialization_format(),
+                                                   .offered_qos_profiles = convertOfferedQosToYaml(pubInfo),
+                                                   .type_description_hash =
+                                                       rosbag2_transport::type_description_hash_for_topic(pubInfo)};
 
+        const bool hasTransientLocal = std::any_of(pubInfo.begin(), pubInfo.end(), [](const auto& info) {
+            return info.qos_profile().durability() == rclcpp::DurabilityPolicy::TransientLocal;
+        });
+
+        const TopicMetadata md{rosMd, hasTransientLocal, topicMetadata.size()};
+        {
+            std::lock_guard l(metaDataLock);
+            // push before subscription, the callback might access this
+            topicMetadata.push_back(md);
+        }
+
+        RCLCPP_INFO_STREAM(log, "Subscribing to: " << topic);
+        // large buffer because we do not want to miss messages, ever.
         rclcpp::QoS qos(50);
-        if (md->transient_local)
+        if (md.transientLocal)
         {
             qos.transient_local();
         }
 
-        TopicMetadata finalMd = *md;
-        {
-            std::lock_guard l(metaDataLock);
-            // push before subscription, the callback might access this
-            topicMetadata.push_back(finalMd);
-        }
-
         rclcpp::SubscriptionBase::SharedPtr sub = nh.create_generic_subscription(
-            md->topicName, md->topicTypeName, qos, [this, finalMd](SerializedMsgPtr msg) { topicCB(msg, finalMd); });
+            md.rosMetadata.name, md.rosMetadata.type, qos, [this, md](SerializedMsgPtr msg) { topicCB(msg, md); });
 
         subscribers.push_back(sub);
         subscribedTopics.emplace(topic);
@@ -187,6 +204,7 @@ void Snapshotter::writeBagFile(const std::string& path, BagCompression compressi
             }
 
             writer.open(storageOpts);
+
             /** write all old latched messages 3 seconds before the actual log starts.
              *  The value 3 is arbitrary. The idea is to make the old latched messages stand out
              *  to a human reader when looking at the bag. We do the calculation in double because rclcpp::Time will
@@ -247,7 +265,7 @@ void Snapshotter::messageDroppedFromBufferCB(BufferEntry&& entry)
     bool isLatched = false;
     {
         std::lock_guard l(metaDataLock);
-        isLatched = topicMetadata[entry.topicMetaDataIdx].transient_local;
+        isLatched = topicMetadata[entry.topicMetaDataIdx].transientLocal;
     }
 
     if (isLatched)
