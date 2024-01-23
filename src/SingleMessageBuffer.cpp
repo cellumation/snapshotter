@@ -71,6 +71,13 @@ void SingleMessageBuffer::writeToBag(rosbag2_cpp::Writer& writer, const std::vec
                                      rclcpp::Time rewriteTimestamp) const
 {
     std::scoped_lock lock(messagesLock);
+
+    for (const auto& [_, entry] : messages)
+    {
+        const TopicMetadata& md(topicMetadata[entry.topicMetaDataIdx]);
+        writer.create_topic(md.rosMetadata);
+    }
+
     if (rewriteTimestamp < minValidTimeStamp)
     {
         RCLCPP_WARN(rclcpp::get_logger("snapshotter"), "rewriteTimestamp < rclcpp::TIME_MIN. Fixing timestamp");
@@ -80,7 +87,7 @@ void SingleMessageBuffer::writeToBag(rosbag2_cpp::Writer& writer, const std::vec
     for (const auto& [topic, entry] : messages)
     {
         const TopicMetadata& md(topicMetadata[entry.topicMetaDataIdx]);
-        writer.write(entry.msg, md.topicName, md.topicTypeName, rewriteTimestamp);
+        writer.write(entry.msg, md.rosMetadata.name, md.rosMetadata.type, rewriteTimestamp);
     }
 }
 

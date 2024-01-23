@@ -34,6 +34,7 @@
 #pragma once
 #include <rclcpp/serialized_message.hpp>
 #include <rclcpp/time.hpp>
+#include <rosbag2_storage/topic_metadata.hpp>
 #include <stdexcept>
 
 namespace snapshotter
@@ -56,27 +57,22 @@ struct BagWriteException : std::runtime_error
 
 struct TopicMetadata
 {
-    TopicMetadata(const std::string& topicName, const std::string& topicTypeName, bool transient_local,
-                  uint16_t metaDataIdx) :
-        topicName(topicName),
-        topicTypeName(topicTypeName),
-        transient_local(transient_local),
+    TopicMetadata(const rosbag2_storage::TopicMetadata& rosMetadata, bool transientLocal, size_t metaDataIdx) :
+        rosMetadata(rosMetadata),
+        transientLocal(transientLocal),
         metaDataIdx(metaDataIdx)
 
     {}
-
-    std::string topicName;
-    std::string topicTypeName;
-
-    bool transient_local;
+    rosbag2_storage::TopicMetadata rosMetadata;
+    bool transientLocal;
 
     // unique index / id of the metadata.
-    uint16_t metaDataIdx;
+    size_t metaDataIdx;
 };
 
 struct BufferEntry
 {
-    /**ATTENTION The BufferEntries are copied when writting to the file.
+    /**ATTENTION The BufferEntries are copied when writing to the file.
      *           This becomes a problem when the BufferEntry grows in size.
      *           Currently this is fine because it only contains a pointer a timestamp, and
      *           and index to the associated metadata.
