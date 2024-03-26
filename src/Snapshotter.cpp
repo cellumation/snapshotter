@@ -37,7 +37,7 @@
 #include <rmw/rmw.h>
 #include <rosbag2_cpp/writer.hpp>
 #include <rosbag2_cpp/writers/sequential_writer.hpp>
-#include <rosbag2_transport/qos.hpp>
+#include <rosbag2_storage/qos.hpp>
 #include <rosbag2_transport/recorder.hpp>
 #include <sys/resource.h>
 #include <thread>
@@ -59,9 +59,20 @@ std::string convertOfferedQosToYaml(const std::vector<rclcpp::TopicEndpointInfo>
     //       This does not cause any problems when replaying the bag, but it is still ugly.
     for (const auto& info : endpointInfos)
     {
-        yaml.push_back(rosbag2_transport::Rosbag2QoS(info.qos_profile()));
+        yaml.push_back(rosbag2_storage::Rosbag2QoS(info.qos_profile()));
     }
     return YAML::Dump(yaml);
+}
+
+std::vector<rclcpp::QoS> convertToQos(const std::vector<rclcpp::TopicEndpointInfo>& endpointInfos)
+{
+    std::vector<rclcpp::QoS> ret;
+    ret.reserve(endpointInfos.size());
+    for (const auto& info : endpointInfos)
+    {
+        ret.push_back(rosbag2_storage::Rosbag2QoS(info.qos_profile()));
+    }
+    return ret;
 }
 
 std::string getTopicType(const std::vector<rclcpp::TopicEndpointInfo>& endpointInfos)
@@ -92,7 +103,7 @@ bool Snapshotter::subscribe(const std::string& topic)
         const rosbag2_storage::TopicMetadata rosMd{.name = topic,
                                                    .type = getTopicType(pubInfo),
                                                    .serialization_format = rmw_get_serialization_format(),
-                                                   .offered_qos_profiles = convertOfferedQosToYaml(pubInfo),
+                                                   .offered_qos_profiles = convertToQos(pubInfo),
                                                    .type_description_hash =
                                                        rosbag2_transport::type_description_hash_for_topic(pubInfo)};
 
