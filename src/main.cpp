@@ -32,15 +32,17 @@
  *  POSSIBILITY OF SUCH DAMAGE.
  ********************************************************************/
 
+#include "Node.hpp"
 #include "Snapshotter.hpp"
 #include "TopicFilter.hpp"
 
-#include "Node.hpp"
+#include <cm_executors/events_cbg_executor.hpp>
 #include <rclcpp/executors.hpp>
 #include <rclcpp/logging.hpp>
 #include <rclcpp/node.hpp>
 #include <rclcpp/timer.hpp>
 #include <snapshotter/srv/take_snapshot.hpp>
+
 #include <string>
 #include <vector>
 
@@ -142,17 +144,9 @@ int main(int argc, char** argv)
 
     snapshotter::SnapshotNode node{nh, cfg, compression, topicFilter};
 
-    rclcpp::executors::SingleThreadedExecutor executor;
+    rclcpp::executors::EventsCBGExecutor executor;
     executor.add_node(nh.get_node_base_interface());
 
-    while (rclcpp::ok())
-    {
-        rclcpp::WallRate processRate(processFrequency);
-
-        // process all available events and return
-        executor.spin_some();
-        processRate.sleep();
-    }
-
+    executor.spin();
     return 0;
 }
