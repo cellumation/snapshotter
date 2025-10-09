@@ -35,12 +35,12 @@
 #include "Snapshotter.hpp"
 #include "TopicFilter.hpp"
 
+#include "Node.hpp"
 #include <rclcpp/executors.hpp>
 #include <rclcpp/logging.hpp>
 #include <rclcpp/node.hpp>
+#include <rclcpp/timer.hpp>
 #include <snapshotter/srv/take_snapshot.hpp>
-
-#include <mutex>
 #include <string>
 #include <vector>
 
@@ -138,60 +138,9 @@ int main(int argc, char** argv)
     cfg.maxMemoryBytes = size_t(maxMemoryMb) * size_t(1024 * 1024);
     cfg.niceOnWrite = nh.get_parameter("nice_on_write").as_bool();
 
-    Snapshotter snapshotter(nh, cfg);
-
-    std::function<void()> subscribeTopics = [&snapshotter, &topicFilter, &nh]() {
-        std::map<std::string, std::vector<std::string>> allTopics = nh.get_topic_names_and_types();
-
-        for (const auto& [topicName, _] : allTopics)
-        {
-            if (!topicFilter.exclude(topicName))
-            {
-                snapshotter.subscribe(topicName);
-            }
-        }
-    };
-    // call once to immediately subscribe to all available topics
-    subscribeTopics();
-    auto topicCheck = nh.create_wall_timer(std::chrono::seconds(2), subscribeTopics);
-
     BagCompression compression = getCompression(nh);
 
-    std::mutex takeSnapshotServiceLock;
-
-    std::function<bool(snapshotter::srv::TakeSnapshot::Request::SharedPtr,
-                       snapshotter::srv::TakeSnapshot::Response::SharedPtr)>
-        takeSnapshotCb = [&](snapshotter::srv::TakeSnapshot::Request::SharedPtr req,
-                             snapshotter::srv::TakeSnapshot::Response::SharedPtr resp) {
-            std::unique_lock<std::mutex> lock(takeSnapshotServiceLock, std::try_to_lock);
-            if (!lock.owns_lock())
-            {
-                // mutex wasn't locked. Handle it.
-                resp->success = false;
-                resp->message = "Already taking a snapshot.";
-                return true;
-            }
-
-            try
-            {
-                snapshotter.writeBagFile(req->filename, compression);
-                resp->success = true;
-            }
-            catch (const std::exception& e)
-            {
-                RCLCPP_ERROR_STREAM(nh.get_logger(), "Got exception while writing bag : " << e.what());
-                resp->message = e.what();
-                resp->success = false;
-            }
-            catch (...)
-            {
-                resp->message = "unknown error";
-                resp->success = false;
-            }
-
-            return true;
-        };
-    auto service = nh.create_service<snapshotter::srv::TakeSnapshot>("take_snapshot", takeSnapshotCb);
+    snapshotter::SnapshotNode node{nh, cfg, compression, topicFilter};
 
     rclcpp::executors::SingleThreadedExecutor executor;
     executor.add_node(nh.get_node_base_interface());
@@ -204,5 +153,6 @@ int main(int argc, char** argv)
         executor.spin_some();
         processRate.sleep();
     }
+
     return 0;
 }

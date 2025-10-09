@@ -34,6 +34,7 @@
 #include "Snapshotter.hpp"
 #include <cerrno>
 #include <chrono>
+#include <optional>
 #include <rmw/rmw.h>
 #include <rosbag2_cpp/writer.hpp>
 #include <rosbag2_cpp/writers/sequential_writer.hpp>
@@ -125,58 +126,9 @@ bool Snapshotter::subscribe(const std::string& topic)
     return true;
 }
 
-void Snapshotter::writeBagFile(const std::string& path, BagCompression compression)
+void Snapshotter::writeBagFile(const std::string& path, BagCompression compression, const WriteDoneCb& cb)
 {
-    using namespace rosbag2_cpp;
-
-    const auto startTime = std::chrono::steady_clock::now();
-
-    std::unique_ptr<rosbag2_cpp::writer_interfaces::BaseWriterInterface> writerImpl;
-    writerImpl = std::make_unique<rosbag2_cpp::writers::SequentialWriter>();
-    rosbag2_cpp::Writer writer(std::move(writerImpl));
-
-    rosbag2_storage::StorageOptions storageOpts{};
-    storageOpts.uri = path;
-
-    switch (compression)
-    {
-        case BagCompression::FAST:
-        {
-            storageOpts.storage_preset_profile = "zstd_fast";
-        }
-        break;
-        case BagCompression::SLOW:
-        {
-            storageOpts.storage_preset_profile = "zstd_small";
-        }
-        break;
-        case BagCompression::NONE:
-            break;
-        default:
-            throw BagWriteException("Unhandled enum value");
-    }
-
-    std::unique_ptr<MessageRingBuffer> bufferCopy;
-    std::unique_ptr<SingleMessageBuffer> latchedBufferCopy;
-    {
-        // wait until all threads have stopped writing to the buffers,
-        // then copy both buffers
-        std::unique_lock lock(writeBagLock);
-        bufferCopy = std::make_unique<MessageRingBuffer>(buffer);
-        latchedBufferCopy = std::make_unique<SingleMessageBuffer>(lastDroppedLatchedMsgs);
-    }
-
-    std::vector<TopicMetadata> metaData;
-    {
-        std::unique_lock l(metaDataLock);
-        metaData = topicMetadata;
-    }
-
-    // replace the dropped-callback of the copied buffer. Otherwise dropped messages
-    // from that buffer would end up in the original lastDroppedLatchedMsgs buffer.
-    bufferCopy->setDroppedCb([](BufferEntry&&) {});
-
-    // writing is done in a seperate thread because errors might happen
+    // writing is done in a separate thread because errors might happen
     // during writing and there is no guaranteed way to reset the
     // thread priority once an error occurred. If we would use one
     // of the ros threads we would leave a ros thread with very low
@@ -185,24 +137,72 @@ void Snapshotter::writeBagFile(const std::string& path, BagCompression compressi
     // priority could still fail (and in fact did fail on my machine).
     // Thus it is much easier and safer to spawn a new thread and let
     // it die once we are done writing.
-    std::exception_ptr ex = nullptr;
-    std::thread t([&] {
+
+    std::thread t([path, compression, cb, this]() {
+        using namespace rosbag2_cpp;
+
+        if (cfg.niceOnWrite)
+        {
+            // according to 'man setpriority' this call is not POSIX conform, and sets the priority
+            // for this thread and all of its child threads. This exactly what we want.
+            errno = 0;
+            if (0 != setpriority(PRIO_PROCESS, 0, 19) || errno != 0)
+            {
+                const std::string msg = "setpriority failed: " + std::string(std::strerror(errno));
+                RCLCPP_ERROR_STREAM(log, msg);
+                cb(BagWriteException(msg));
+                return;
+            }
+        }
+
+        const auto startTime = std::chrono::steady_clock::now();
+
+        std::unique_ptr<rosbag2_cpp::writer_interfaces::BaseWriterInterface> writerImpl;
+        writerImpl = std::make_unique<rosbag2_cpp::writers::SequentialWriter>();
+        rosbag2_cpp::Writer writer(std::move(writerImpl));
+
+        rosbag2_storage::StorageOptions storageOpts{};
+        storageOpts.uri = path;
+
+        switch (compression)
+        {
+            case BagCompression::FAST:
+            {
+                storageOpts.storage_preset_profile = "zstd_fast";
+            }
+            break;
+            case BagCompression::SLOW:
+            {
+                storageOpts.storage_preset_profile = "zstd_small";
+            }
+            break;
+            case BagCompression::NONE:
+                break;
+        }
+
+        // copy the buffers to allow the snapshotter to continue recording while we write
+        std::unique_ptr<MessageRingBuffer> bufferCopy;
+        std::unique_ptr<SingleMessageBuffer> latchedBufferCopy;
+        {
+            // wait until all threads have stopped writing to the buffers,
+            // then copy both buffers
+            std::unique_lock lock(writeBagLock);
+            bufferCopy = std::make_unique<MessageRingBuffer>(buffer);
+            latchedBufferCopy = std::make_unique<SingleMessageBuffer>(lastDroppedLatchedMsgs);
+        }
+
+        std::vector<TopicMetadata> metaData;
+        {
+            std::unique_lock l(metaDataLock);
+            metaData = topicMetadata;
+        }
+
+        // replace the dropped-callback of the copied buffer. Otherwise dropped messages
+        // from that buffer would end up in the original lastDroppedLatchedMsgs buffer.
+        bufferCopy->setDroppedCb([](BufferEntry&&) {});
+
         try
         {
-            if (cfg.niceOnWrite)
-            {
-                // according to 'man setpriority' this call is not POSIX conform, and sets the priority
-                // for this thread and all of its child threads. This exactly what we want.
-                errno = 0;
-                if (0 != setpriority(PRIO_PROCESS, 0, 19) || errno != 0)
-                {
-                    const std::string msg = "setpriority failed: " + std::string(std::strerror(errno));
-                    RCLCPP_ERROR_STREAM(log, msg);
-                    ex = std::make_exception_ptr(BagWriteException(msg));
-                    return;
-                }
-            }
-
             writer.open(storageOpts);
 
             /** write all old latched messages 3 seconds before the actual log starts.
@@ -219,23 +219,19 @@ void Snapshotter::writeBagFile(const std::string& path, BagCompression compressi
         }
         catch (const std::exception& e)
         {
-            ex = std::make_exception_ptr(BagWriteException(e.what()));
+            cb(BagWriteException(e.what()));
         }
         catch (...) // we really really don't want to crash :D
         {
-            ex = std::make_exception_ptr(BagWriteException("unknown error"));
+            cb(BagWriteException("unknown error"));
         }
+        const auto elapsedTime =
+            std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - startTime);
+        RCLCPP_INFO_STREAM(log, "Writing took: " << elapsedTime.count() << " ms");
+
+        cb(std::nullopt);
     });
-    t.join();
-
-    const auto elapsedTime =
-        std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - startTime);
-    RCLCPP_INFO_STREAM(log, "Writing took: " << elapsedTime.count() << " ms");
-
-    if (ex)
-    {
-        std::rethrow_exception(ex);
-    }
+    t.detach();
 }
 
 void Snapshotter::topicCB(const SerializedMsgPtr& msg, const TopicMetadata& md)

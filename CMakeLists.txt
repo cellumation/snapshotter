@@ -31,6 +31,8 @@ add_library(${PROJECT_NAME}_lib OBJECT
   src/TopicFilter.hpp
   src/SingleMessageBuffer.hpp
   src/SingleMessageBuffer.cpp
+  src/Node.hpp
+  src/Node.cpp
 )
 target_link_libraries(
     ${PROJECT_NAME}_lib
