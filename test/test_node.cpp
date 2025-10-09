@@ -2,7 +2,9 @@
 #include "Common.hpp"
 #include "Snapshotter.hpp"
 #include <filesystem>
+#include <future>
 #include <gtest/gtest.h>
+#include <optional>
 #include <rclcpp/executors.hpp>
 #include <rclcpp/node.hpp>
 #include <rosbag2_cpp/reader.hpp>
@@ -279,8 +281,13 @@ TEST(TestSuite, SimpleTest)
     pub.run();
 
     const std::string file = getLogFileName();
-    snapshotter.writeBagFile(file, BagCompression::NONE);
-
+    std::promise<std::optional<BagWriteException>> writeDonePromise;
+    auto writeDoneFuture = writeDonePromise.get_future();
+    snapshotter.writeBagFile(file, BagCompression::NONE, [&](const std::optional<BagWriteException>& maybeError) {
+        writeDonePromise.set_value(maybeError);
+    });
+    ASSERT_EQ(writeDoneFuture.wait_for(std::chrono::seconds(20)), std::future_status::ready);
+    ASSERT_FALSE(writeDoneFuture.get().has_value());
     pub.checkBoolMsgs(file, false);
     pub.checkFloatMsgs(file, false);
 }
@@ -302,7 +309,14 @@ TEST(TestSuite, DropAllMsgs)
     pub.run();
 
     const std::string file = getLogFileName();
-    snapshotter.writeBagFile(file, BagCompression::NONE);
+    std::promise<std::optional<BagWriteException>> writeDonePromise;
+    auto writeDoneFuture = writeDonePromise.get_future();
+    snapshotter.writeBagFile(file, BagCompression::NONE,
+                             [&writeDonePromise](const std::optional<BagWriteException>& maybeError) {
+                                 writeDonePromise.set_value(maybeError);
+                             });
+    ASSERT_EQ(writeDoneFuture.wait_for(std::chrono::seconds(20)), std::future_status::ready);
+    ASSERT_FALSE(writeDoneFuture.get().has_value());
 
     rosbag2_cpp::Reader reader;
     reader.open(file);
@@ -333,7 +347,14 @@ TEST(TestSuite, DropSomeMsgs)
     pub.run();
 
     const std::string file = getLogFileName();
-    snapshotter.writeBagFile(file, BagCompression::NONE);
+    std::promise<std::optional<BagWriteException>> writeDonePromise;
+    auto writeDoneFuture = writeDonePromise.get_future();
+    snapshotter.writeBagFile(file, BagCompression::NONE,
+                             [&writeDonePromise](const std::optional<BagWriteException>& maybeError) {
+                                 writeDonePromise.set_value(maybeError);
+                             });
+    ASSERT_EQ(writeDoneFuture.wait_for(std::chrono::seconds(20)), std::future_status::ready);
+    ASSERT_FALSE(writeDoneFuture.get().has_value());
 
     rosbag2_cpp::Reader reader;
     reader.open(file);
@@ -383,7 +404,14 @@ TEST(TestSuite, Latched)
     pub.run();
 
     const std::string file = getLogFileName();
-    snapshotter.writeBagFile(file, BagCompression::NONE);
+    std::promise<std::optional<BagWriteException>> writeDonePromise;
+    auto writeDoneFuture = writeDonePromise.get_future();
+    snapshotter.writeBagFile(file, BagCompression::NONE,
+                             [&writeDonePromise](const std::optional<BagWriteException>& maybeError) {
+                                 writeDonePromise.set_value(maybeError);
+                             });
+    ASSERT_EQ(writeDoneFuture.wait_for(std::chrono::seconds(20)), std::future_status::ready);
+    ASSERT_FALSE(writeDoneFuture.get().has_value());
 
     rosbag2_cpp::Reader reader;
     reader.open(file);

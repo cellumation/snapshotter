@@ -61,9 +61,13 @@ public:
      *  If the topic is already subscribed nothing will happen. */
     bool subscribe(const std::string& topic);
 
-    /**Stops recording, writes the bag and restarts recording
-     * @throw BagWriteException in case of error */
-    void writeBagFile(const std::string& path, BagCompression compression);
+    using WriteDoneCb = std::function<void(const std::optional<BagWriteException>&)>;
+
+    /** async writes the bag file.
+     *  Recording of data continues while writing.
+     *  This method is not blocking.
+     *  @param cb will be invoked when the writing is either done or an error occurred*/
+    void writeBagFile(const std::string& path, BagCompression compression, const WriteDoneCb& cb);
 
 private:
     void topicCB(const SerializedMsgPtr& msg, const TopicMetadata& md);
