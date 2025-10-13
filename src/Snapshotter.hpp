@@ -35,8 +35,11 @@
 #include "Common.hpp"
 #include "MessageRingBuffer.hpp"
 #include "SingleMessageBuffer.hpp"
+#include <atomic>
+#include <memory>
 #include <rclcpp/node.hpp>
 #include <shared_mutex>
+#include <thread>
 #include <unordered_set>
 #include <vector>
 
@@ -57,16 +60,23 @@ public:
 
     Snapshotter(rclcpp::Node& nh, const Config& cfg);
 
+    /** The destructor will block until the currently running write operation has finished. */
+    ~Snapshotter();
+
     /** The snapshotter will subscribe to the given @p topic and log it.
      *  If the topic is already subscribed nothing will happen. */
     bool subscribe(const std::string& topic);
 
-    using WriteDoneCb = std::function<void(const std::optional<BagWriteException>&)>;
+    /** The callback will be invoked when the writing is either done or an error occurred.
+     *  It will be invoked from a different thread than the one that called writeBagFile.
+     *  @note The callback may not throw an exception.
+     *  @p error will contain the error, if any error occurred. If writing finished successfully it will be nullopt.*/
+    using WriteDoneCb = std::function<void(const std::optional<BagWriteException>& error)>;
 
     /** async writes the bag file.
      *  Recording of data continues while writing.
      *  This method is not blocking.
-     *  @param cb will be invoked when the writing is either done or an error occurred*/
+     *  @param cb will be invoked when the writing is either done or an error occurred.*/
     void writeBagFile(const std::string& path, BagCompression compression, const WriteDoneCb& cb);
 
 private:
@@ -87,6 +97,11 @@ private:
     std::vector<TopicMetadata> topicMetadata;
 
     rclcpp::Logger log;
+
+    /** used to ensure that only one write operation is in progress at a time */
+    std::mutex writerRunningLock;
+    /** The thread used for all write operations */
+    std::jthread writer;
 };
 
 } // namespace snapshotter
