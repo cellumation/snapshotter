@@ -22,7 +22,6 @@ public:
 private:
     void subscribeTopics();
 
-    Snapshotter snapshotter;
     rclcpp::Node& nh;
     BagCompression compression;
     TopicFilter topicFilter;
@@ -30,6 +29,10 @@ private:
     rclcpp::Service<snapshotter::srv::TakeSnapshot>::SharedPtr service;
     std::mutex takeSnapshotServiceLock;
     std::shared_ptr<rclcpp::TimerBase> subscribeTimer;
+
+    // create snapshotter last to ensure that it is deleted first
+    // because the callback from the snapshotter will access the node
+    Snapshotter snapshotter;
 };
 
 } // namespace snapshotter

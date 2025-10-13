@@ -7,10 +7,10 @@ namespace snapshotter
 
 SnapshotNode::SnapshotNode(rclcpp::Node& nh, const snapshotter::Snapshotter::Config& cfg, BagCompression compression,
                            const TopicFilter& topicFilter) :
-    snapshotter{nh, cfg},
     nh{nh},
     compression{compression},
-    topicFilter{topicFilter}
+    topicFilter{topicFilter},
+    snapshotter{nh, cfg}
 {
     subscribeTopics();
 
@@ -35,14 +35,10 @@ void SnapshotNode::handleRequest(const std::shared_ptr<rmw_request_id_t> header,
 
     snapshotter.writeBagFile(req->filename, compression, [this, header](const std::optional<BagWriteException>& error) {
         snapshotter::srv::TakeSnapshot::Response resp;
+        resp.success = !error.has_value();
         if (error)
         {
             resp.message = error->what();
-            resp.success = false;
-        }
-        else
-        {
-            resp.success = true;
         }
         try
         {

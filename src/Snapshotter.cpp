@@ -34,6 +34,7 @@
 #include "Snapshotter.hpp"
 #include <cerrno>
 #include <chrono>
+#include <mutex>
 #include <optional>
 #include <rmw/rmw.h>
 #include <rosbag2_cpp/writer.hpp>
@@ -51,6 +52,15 @@ Snapshotter::Snapshotter(rclcpp::Node& nh, const Snapshotter::Config& cfg) :
     buffer(cfg.maxMemoryBytes, [this](BufferEntry&& e) { messageDroppedFromBufferCB(std::move(e)); }),
     log(nh.get_logger())
 {}
+
+Snapshotter::~Snapshotter()
+{
+    // take the writer lock so nobody can start a new write operation while
+    // we are being destructed
+    // This will also block until a currently running writer thread has finished to ensure that
+    // the callback can still be invoked
+    writerRunningLock.lock();
+}
 
 /// dumps the qos profiles from all endpoints into a yaml node
 std::string convertOfferedQosToYaml(const std::vector<rclcpp::TopicEndpointInfo>& endpointInfos)
@@ -138,8 +148,18 @@ void Snapshotter::writeBagFile(const std::string& path, BagCompression compressi
     // Thus it is much easier and safer to spawn a new thread and let
     // it die once we are done writing.
 
-    std::thread t([path, compression, cb, this]() {
+    std::unique_lock<std::mutex> lock(writerRunningLock, std::try_to_lock);
+    if (!lock.owns_lock())
+    {
+        cb(BagWriteException("Snapshotter is already writing a bag file"));
+        return;
+    }
+
+    writer = std::jthread([path, compression, cb, this, lock = std::move(lock)]() mutable {
         using namespace rosbag2_cpp;
+
+        // move lock to local scope to ensure that it is released when the lambda execution ends
+        auto localLock = std::move(lock);
 
         if (cfg.niceOnWrite)
         {
@@ -208,14 +228,16 @@ void Snapshotter::writeBagFile(const std::string& path, BagCompression compressi
             /** write all old latched messages 3 seconds before the actual log starts.
              *  The value 3 is arbitrary. The idea is to make the old latched messages stand out
              *  to a human reader when looking at the bag. We do the calculation in double because rclcpp::Time will
-             * throw when the time becomes negative (which can happen when running in simulation because sim time starts
-             * at 0) */
+             * throw when the time becomes negative (which can happen when running in simulation because sim time
+             * starts at 0) */
             rclcpp::Time latchedTime = bufferCopy->getOldestReceiveTime() - std::chrono::seconds(3);
             latchedTime = std::max(latchedTime, rclcpp::Time(static_cast<int64_t>(0), RCL_ROS_TIME));
             latchedBufferCopy->writeToBag(writer, metaData, latchedTime);
 
             bufferCopy->writeToBag(writer, metaData);
             writer.close();
+
+            cb(std::nullopt);
         }
         catch (const std::exception& e)
         {
@@ -228,10 +250,7 @@ void Snapshotter::writeBagFile(const std::string& path, BagCompression compressi
         const auto elapsedTime =
             std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - startTime);
         RCLCPP_INFO_STREAM(log, "Writing took: " << elapsedTime.count() << " ms");
-
-        cb(std::nullopt);
     });
-    t.detach();
 }
 
 void Snapshotter::topicCB(const SerializedMsgPtr& msg, const TopicMetadata& md)
