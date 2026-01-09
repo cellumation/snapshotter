@@ -262,8 +262,6 @@ struct DataPublisher
 
 TEST(TestSuite, SimpleTest)
 {
-    //     clearLogFolder();
-
     Snapshotter::Config cfg;
     cfg.maxMemoryBytes = 1 * 1024 * 1024 * 1024;
     Snapshotter snapshotter(*handle, cfg);
@@ -288,6 +286,7 @@ TEST(TestSuite, SimpleTest)
     });
     ASSERT_EQ(writeDoneFuture.wait_for(std::chrono::seconds(20)), std::future_status::ready);
     ASSERT_FALSE(writeDoneFuture.get().has_value());
+    std::this_thread::sleep_for(std::chrono::seconds(2));
     pub.checkBoolMsgs(file, false);
     pub.checkFloatMsgs(file, false);
 }
@@ -318,6 +317,7 @@ TEST(TestSuite, DropAllMsgs)
     ASSERT_EQ(writeDoneFuture.wait_for(std::chrono::seconds(20)), std::future_status::ready);
     ASSERT_FALSE(writeDoneFuture.get().has_value());
 
+    std::this_thread::sleep_for(std::chrono::seconds(2));
     rosbag2_cpp::Reader reader;
     reader.open(file);
 
@@ -356,6 +356,7 @@ TEST(TestSuite, DropSomeMsgs)
     ASSERT_EQ(writeDoneFuture.wait_for(std::chrono::seconds(20)), std::future_status::ready);
     ASSERT_FALSE(writeDoneFuture.get().has_value());
 
+    std::this_thread::sleep_for(std::chrono::seconds(2));
     rosbag2_cpp::Reader reader;
     reader.open(file);
 
@@ -413,6 +414,7 @@ TEST(TestSuite, Latched)
     ASSERT_EQ(writeDoneFuture.wait_for(std::chrono::seconds(20)), std::future_status::ready);
     ASSERT_FALSE(writeDoneFuture.get().has_value());
 
+    std::this_thread::sleep_for(std::chrono::seconds(2));
     rosbag2_cpp::Reader reader;
     reader.open(file);
     bool msgFound = false;
@@ -445,14 +447,14 @@ int main(int argc, char** argv)
     executor = std::make_shared<rclcpp::executors::MultiThreadedExecutor>();
     executor->add_node(nh.get_node_base_interface());
 
+    clearLogFolder();
+
     // //create log folder
     const fs::path p(LOG_PATH);
     if (!fs::exists(p))
     {
         fs::create_directories(p);
     }
-
-    clearLogFolder();
 
     int result = RUN_ALL_TESTS();
 
