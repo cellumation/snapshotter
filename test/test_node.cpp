@@ -1,6 +1,9 @@
 
 #include "Common.hpp"
 #include "Snapshotter.hpp"
+#include <cerrno>
+#include <cstring>
+#include <fcntl.h>
 #include <filesystem>
 #include <future>
 #include <gtest/gtest.h>
@@ -12,6 +15,7 @@
 #include <std_msgs/msg/float32_multi_array.hpp>
 #include <std_msgs/msg/int32.hpp>
 #include <std_msgs/msg/string.hpp>
+#include <unistd.h>
 
 #define LOG_PATH "/tmp/snapshotter_tests"
 
@@ -40,6 +44,25 @@ std::string getLogFileName()
     const std::string file = std::string(LOG_PATH) + "/test_" + std::to_string(i) + "/";
     i++;
     return file;
+}
+
+/** Flushes the filesystem that @p filename is stored on
+ */
+void flushFilesystem(const std::string& filename)
+{
+    int fd = open(filename.c_str(), O_RDONLY);
+    if (fd >= 0)
+    {
+        if (fsync(fd) != 0)
+        {
+            throw std::runtime_error(strerror(errno));
+        }
+        close(fd);
+    }
+    else
+    {
+        throw std::runtime_error(strerror(errno));
+    }
 }
 
 bool subscribeWithTimeout(std::vector<std::string> topics, rclcpp::Duration timeout, Snapshotter& s)
@@ -262,8 +285,6 @@ struct DataPublisher
 
 TEST(TestSuite, SimpleTest)
 {
-    //     clearLogFolder();
-
     Snapshotter::Config cfg;
     cfg.maxMemoryBytes = 1 * 1024 * 1024 * 1024;
     Snapshotter snapshotter(*handle, cfg);
@@ -284,10 +305,13 @@ TEST(TestSuite, SimpleTest)
     std::promise<std::optional<BagWriteException>> writeDonePromise;
     auto writeDoneFuture = writeDonePromise.get_future();
     snapshotter.writeBagFile(file, BagCompression::NONE, [&](const std::optional<BagWriteException>& maybeError) {
+
+
         writeDonePromise.set_value(maybeError);
     });
     ASSERT_EQ(writeDoneFuture.wait_for(std::chrono::seconds(20)), std::future_status::ready);
     ASSERT_FALSE(writeDoneFuture.get().has_value());
+    flushFilesystem(file);
     pub.checkBoolMsgs(file, false);
     pub.checkFloatMsgs(file, false);
 }
@@ -318,6 +342,7 @@ TEST(TestSuite, DropAllMsgs)
     ASSERT_EQ(writeDoneFuture.wait_for(std::chrono::seconds(20)), std::future_status::ready);
     ASSERT_FALSE(writeDoneFuture.get().has_value());
 
+    flushFilesystem(file);
     rosbag2_cpp::Reader reader;
     reader.open(file);
 
@@ -356,6 +381,7 @@ TEST(TestSuite, DropSomeMsgs)
     ASSERT_EQ(writeDoneFuture.wait_for(std::chrono::seconds(20)), std::future_status::ready);
     ASSERT_FALSE(writeDoneFuture.get().has_value());
 
+    flushFilesystem(file);
     rosbag2_cpp::Reader reader;
     reader.open(file);
 
@@ -413,6 +439,7 @@ TEST(TestSuite, Latched)
     ASSERT_EQ(writeDoneFuture.wait_for(std::chrono::seconds(20)), std::future_status::ready);
     ASSERT_FALSE(writeDoneFuture.get().has_value());
 
+    flushFilesystem(file);
     rosbag2_cpp::Reader reader;
     reader.open(file);
     bool msgFound = false;
@@ -445,14 +472,14 @@ int main(int argc, char** argv)
     executor = std::make_shared<rclcpp::executors::MultiThreadedExecutor>();
     executor->add_node(nh.get_node_base_interface());
 
+    clearLogFolder();
+
     // //create log folder
     const fs::path p(LOG_PATH);
     if (!fs::exists(p))
     {
         fs::create_directories(p);
     }
-
-    clearLogFolder();
 
     int result = RUN_ALL_TESTS();
 
