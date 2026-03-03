@@ -67,6 +67,11 @@ public:
      *  If the topic is already subscribed nothing will happen. */
     bool subscribe(const std::string& topic);
 
+    /** The snapshotter will subscribe to the service event topic for the given @p serviceName and log it.
+     *  The service name should be the plain service name (e.g. /my_service), not the event topic name.
+     *  If the service event topic is already subscribed nothing will happen. */
+    bool subscribeService(const std::string& serviceName);
+
     /** The callback will be invoked when the writing is either done or an error occurred.
      *  It will be invoked from a different thread than the one that called writeBagFile.
      *  @note The callback may not throw an exception.

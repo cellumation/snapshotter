@@ -13,6 +13,7 @@ find_package(rosbag2_cpp REQUIRED)
 find_package(rosbag2_compression REQUIRED)
 find_package(rosbag2_transport REQUIRED)
 find_package(std_msgs REQUIRED)
+find_package(std_srvs REQUIRED)
 find_package(cm_executors REQUIRED)
 find_package(rosidl_default_generators REQUIRED)
 
@@ -65,6 +66,7 @@ if(BUILD_TESTING)
     target_include_directories(utest PRIVATE src)
 
     target_link_libraries(utest ${PROJECT_NAME}_lib)
+    ament_target_dependencies(utest std_srvs)
 endif()
 
 ament_package()

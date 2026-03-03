@@ -39,7 +39,9 @@
 namespace snapshotter
 {
 TopicFilter::TopicFilter(const std::vector<std::string>& excludeRegexps_,
-                         const std::vector<std::string>& includeRegexps_)
+                         const std::vector<std::string>& includeRegexps_,
+                         const std::vector<std::string>& excludeServiceRegexps_,
+                         const std::vector<std::string>& includeServiceRegexps_)
 {
     auto log = rclcpp::get_logger("snapshotter");
     for (const std::string& regexp : excludeRegexps_)
@@ -52,6 +54,16 @@ TopicFilter::TopicFilter(const std::vector<std::string>& excludeRegexps_,
         includeRegexps.emplace_back(regexp);
         RCLCPP_INFO_STREAM(log, "Including topic: " << regexp);
     }
+    for (const std::string& regexp : excludeServiceRegexps_)
+    {
+        excludeServiceRegexps.emplace_back(regexp);
+        RCLCPP_INFO_STREAM(log, "Excluding service: " << regexp);
+    }
+    for (const std::string& regexp : includeServiceRegexps_)
+    {
+        includeServiceRegexps.emplace_back(regexp);
+        RCLCPP_INFO_STREAM(log, "Including service: " << regexp);
+    }
 }
 
 bool TopicFilter::exclude(const std::string& topic) const
@@ -63,6 +75,24 @@ bool TopicFilter::exclude(const std::string& topic) const
             for (const std::regex& ir : includeRegexps)
             {
                 if (std::regex_match(topic, ir))
+                {
+                    return false;
+                }
+            }
+            return true;
+        }
+    }
+    return false;
+}
+bool TopicFilter::excludeService(const std::string& serviceName) const
+{
+    for (const std::regex& er : excludeServiceRegexps)
+    {
+        if (std::regex_match(serviceName, er))
+        {
+            for (const std::regex& ir : includeServiceRegexps)
+            {
+                if (std::regex_match(serviceName, ir))
                 {
                     return false;
                 }

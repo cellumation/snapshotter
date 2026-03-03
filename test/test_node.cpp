@@ -8,13 +8,16 @@
 #include <future>
 #include <gtest/gtest.h>
 #include <optional>
+#include <rcl/service_introspection.h>
 #include <rclcpp/executors.hpp>
 #include <rclcpp/node.hpp>
 #include <rosbag2_cpp/reader.hpp>
+#include <rosbag2_cpp/service_utils.hpp>
 #include <std_msgs/msg/bool.hpp>
 #include <std_msgs/msg/float32_multi_array.hpp>
 #include <std_msgs/msg/int32.hpp>
 #include <std_msgs/msg/string.hpp>
+#include <std_srvs/srv/set_bool.hpp>
 #include <unistd.h>
 
 #define LOG_PATH "/tmp/snapshotter_tests"
@@ -460,6 +463,99 @@ TEST(TestSuite, Latched)
         ASSERT_EQ(42, msg.data);
     }
     ASSERT_TRUE(msgFound);
+}
+
+TEST(TestSuite, ServiceLogging)
+{
+    Snapshotter::Config cfg;
+    cfg.maxMemoryBytes = 1 * 1024 * 1024 * 1024;
+    Snapshotter snapshotter(*handle, cfg);
+
+    const std::string serviceName = "/test_service_for_logging";
+    const std::string serviceEventTopic = rosbag2_cpp::service_name_to_service_event_topic_name(serviceName);
+
+    auto srvCallback = [](const std::shared_ptr<std_srvs::srv::SetBool::Request> request,
+                          std::shared_ptr<std_srvs::srv::SetBool::Response> response) {
+        response->success = request->data;
+        response->message = "ok";
+    };
+
+    auto service = handle->create_service<std_srvs::srv::SetBool>(serviceName, srvCallback);
+    service->configure_introspection(handle->get_clock(), rclcpp::SystemDefaultsQoS(),
+                                     RCL_SERVICE_INTROSPECTION_CONTENTS);
+
+    auto client = handle->create_client<std_srvs::srv::SetBool>(serviceName);
+    client->configure_introspection(handle->get_clock(), rclcpp::SystemDefaultsQoS(),
+                                    RCL_SERVICE_INTROSPECTION_CONTENTS);
+
+    // Wait for the service event topic publisher to appear, then subscribe
+    {
+        rclcpp::Time start = handle->now();
+        bool subscribed = false;
+        while (!subscribed && (handle->now() - start) < rclcpp::Duration(std::chrono::seconds(5)))
+        {
+            subscribed = snapshotter.subscribe(serviceEventTopic);
+            ::spin(10);
+        }
+        ASSERT_TRUE(subscribed) << "Failed to subscribe to service event topic";
+    }
+
+    // Wait for subscriber to be connected
+    ::spin(50);
+
+    // Wait for service to be ready
+    ASSERT_TRUE(client->wait_for_service(std::chrono::seconds(5)));
+
+    // Send a few requests
+    for (int i = 0; i < 3; i++)
+    {
+        auto request = std::make_shared<std_srvs::srv::SetBool::Request>();
+        request->data = true;
+        auto future = client->async_send_request(request);
+
+        // Spin until the future completes
+        rclcpp::Time start = handle->now();
+        while (future.wait_for(std::chrono::milliseconds(0)) != std::future_status::ready &&
+               (handle->now() - start) < rclcpp::Duration(std::chrono::seconds(5)))
+        {
+            ::spin(10);
+        }
+        ASSERT_EQ(future.wait_for(std::chrono::milliseconds(0)), std::future_status::ready)
+            << "Service call did not complete in time";
+    }
+
+    // Spin some more to make sure all service events have been received
+    ::spin(100);
+
+    const std::string file = getLogFileName();
+    std::promise<std::optional<BagWriteException>> writeDonePromise;
+    auto writeDoneFuture = writeDonePromise.get_future();
+    snapshotter.writeBagFile(file, BagCompression::NONE,
+                             [&writeDonePromise](const std::optional<BagWriteException>& maybeError) {
+                                 writeDonePromise.set_value(maybeError);
+                             });
+    ASSERT_EQ(writeDoneFuture.wait_for(std::chrono::seconds(20)), std::future_status::ready);
+    ASSERT_FALSE(writeDoneFuture.get().has_value());
+
+    flushFilesystem(file);
+    rosbag2_cpp::Reader reader;
+    reader.open(file);
+
+    size_t serviceEventCount = 0;
+    bool foundServiceEventTopic = false;
+    for (const auto& topicInfo : reader.get_metadata().topics_with_message_count)
+    {
+        if (topicInfo.topic_metadata.name == serviceEventTopic)
+        {
+            foundServiceEventTopic = true;
+            serviceEventCount = topicInfo.message_count;
+        }
+    }
+    ASSERT_TRUE(foundServiceEventTopic) << "Service event topic not found in bag";
+    // 3 requests with introspection on both client and service side produces multiple events per call
+    // (REQUEST_SENT, REQUEST_RECEIVED, RESPONSE_SENT, RESPONSE_RECEIVED)
+    // At minimum we expect some events to be logged
+    ASSERT_GT(serviceEventCount, 0u) << "No service event messages found in bag";
 }
 
 // Run all the tests that were declared with TEST()
