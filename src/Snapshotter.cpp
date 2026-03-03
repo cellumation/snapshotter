@@ -37,6 +37,7 @@
 #include <mutex>
 #include <optional>
 #include <rmw/rmw.h>
+#include <rosbag2_cpp/service_utils.hpp>
 #include <rosbag2_cpp/writer.hpp>
 #include <rosbag2_cpp/writers/sequential_writer.hpp>
 #include <rosbag2_storage/qos.hpp>
@@ -145,6 +146,12 @@ bool Snapshotter::subscribe(const std::string& topic)
     }
 
     return true;
+}
+
+bool Snapshotter::subscribeService(const std::string& serviceName)
+{
+    const std::string eventTopic = rosbag2_cpp::service_name_to_service_event_topic_name(serviceName);
+    return subscribe(eventTopic);
 }
 
 void Snapshotter::writeBagFile(const std::string& path, BagCompression compression, const WriteDoneCb& cb)

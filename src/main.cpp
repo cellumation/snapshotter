@@ -96,6 +96,8 @@ int main(int argc, char** argv)
     allParamsSet &= checkParameter("nice_on_write", false);
     allParamsSet &= checkParameter("exclude_topics", true);
     allParamsSet &= checkParameter("include_topics", true);
+    allParamsSet &= checkParameter("exclude_services", true);
+    allParamsSet &= checkParameter("include_services", true);
     allParamsSet &= checkParameter("bag_compression", false);
     allParamsSet &= checkParameter("process_frequency", false);
     allParamsSet &= checkParameter("keep_latched", false);
@@ -120,7 +122,17 @@ int main(int argc, char** argv)
     {
         includeRegexes = nh.get_parameter("include_topics").as_string_array();
     }
-    TopicFilter topicFilter(excludeRegexes, includeRegexes);
+    std::vector<std::string> excludeServiceRegexes;
+    if (nh.has_parameter("exclude_services"))
+    {
+        excludeServiceRegexes = nh.get_parameter("exclude_services").as_string_array();
+    }
+    std::vector<std::string> includeServiceRegexes;
+    if (nh.has_parameter("include_services"))
+    {
+        includeServiceRegexes = nh.get_parameter("include_services").as_string_array();
+    }
+    TopicFilter topicFilter(excludeRegexes, includeRegexes, excludeServiceRegexes, includeServiceRegexes);
 
     const double processFrequency = nh.get_parameter("process_frequency").as_double();
 

@@ -44,11 +44,19 @@ class TopicFilter
 private:
     std::vector<std::regex> excludeRegexps;
     std::vector<std::regex> includeRegexps;
+    std::vector<std::regex> excludeServiceRegexps;
+    std::vector<std::regex> includeServiceRegexps;
 
 public:
-    TopicFilter(const std::vector<std::string>& excludeRegexps, const std::vector<std::string>& includeRegexps);
+    TopicFilter(const std::vector<std::string>& excludeRegexps, const std::vector<std::string>& includeRegexps,
+                const std::vector<std::string>& excludeServiceRegexps,
+                const std::vector<std::string>& includeServiceRegexps);
 
     /**returns true if the given @p topic should be excluded */
     bool exclude(const std::string& topic) const;
+
+    /**returns true if the given @p serviceName should be excluded.
+     * @p serviceName should be the plain service name (e.g. /my_service), not the event topic name. */
+    bool excludeService(const std::string& serviceName) const;
 };
 } // namespace snapshotter
