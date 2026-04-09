@@ -3,3 +3,5 @@ string filename   # Name of bag file to save snapshot to. Needs to be a full pat
 
 bool success    # True if snapshot succesfully written to disk
 string message  # Error description if failed
+builtin_interfaces/Time first_timestamp   # First timestamp in the bag (excluding latched topics)
+builtin_interfaces/Time last_timestamp    # Last timestamp in the bag

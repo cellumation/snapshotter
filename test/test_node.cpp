@@ -7,6 +7,7 @@
 #include <filesystem>
 #include <future>
 #include <gtest/gtest.h>
+#include <limits>
 #include <optional>
 #include <rcl/service_introspection.h>
 #include <rclcpp/executors.hpp>
@@ -307,11 +308,10 @@ TEST(TestSuite, SimpleTest)
     const std::string file = getLogFileName();
     std::promise<std::optional<BagWriteException>> writeDonePromise;
     auto writeDoneFuture = writeDonePromise.get_future();
-    snapshotter.writeBagFile(file, BagCompression::NONE, [&](const std::optional<BagWriteException>& maybeError) {
-
-
-        writeDonePromise.set_value(maybeError);
-    });
+    snapshotter.writeBagFile(file, BagCompression::NONE,
+                             [&](const std::optional<BagWriteException>& maybeError,
+                                 const rclcpp::Time& /*firstTimestamp*/,
+                                 const rclcpp::Time& /*lastTimestamp*/) { writeDonePromise.set_value(maybeError); });
     ASSERT_EQ(writeDoneFuture.wait_for(std::chrono::seconds(20)), std::future_status::ready);
     ASSERT_FALSE(writeDoneFuture.get().has_value());
     flushFilesystem(file);
@@ -338,10 +338,10 @@ TEST(TestSuite, DropAllMsgs)
     const std::string file = getLogFileName();
     std::promise<std::optional<BagWriteException>> writeDonePromise;
     auto writeDoneFuture = writeDonePromise.get_future();
-    snapshotter.writeBagFile(file, BagCompression::NONE,
-                             [&writeDonePromise](const std::optional<BagWriteException>& maybeError) {
-                                 writeDonePromise.set_value(maybeError);
-                             });
+    snapshotter.writeBagFile(
+        file, BagCompression::NONE,
+        [&writeDonePromise](const std::optional<BagWriteException>& maybeError, const rclcpp::Time& /*firstTimestamp*/,
+                            const rclcpp::Time& /*lastTimestamp*/) { writeDonePromise.set_value(maybeError); });
     ASSERT_EQ(writeDoneFuture.wait_for(std::chrono::seconds(20)), std::future_status::ready);
     ASSERT_FALSE(writeDoneFuture.get().has_value());
 
@@ -377,10 +377,10 @@ TEST(TestSuite, DropSomeMsgs)
     const std::string file = getLogFileName();
     std::promise<std::optional<BagWriteException>> writeDonePromise;
     auto writeDoneFuture = writeDonePromise.get_future();
-    snapshotter.writeBagFile(file, BagCompression::NONE,
-                             [&writeDonePromise](const std::optional<BagWriteException>& maybeError) {
-                                 writeDonePromise.set_value(maybeError);
-                             });
+    snapshotter.writeBagFile(
+        file, BagCompression::NONE,
+        [&writeDonePromise](const std::optional<BagWriteException>& maybeError, const rclcpp::Time& /*firstTimestamp*/,
+                            const rclcpp::Time& /*lastTimestamp*/) { writeDonePromise.set_value(maybeError); });
     ASSERT_EQ(writeDoneFuture.wait_for(std::chrono::seconds(20)), std::future_status::ready);
     ASSERT_FALSE(writeDoneFuture.get().has_value());
 
@@ -435,10 +435,10 @@ TEST(TestSuite, Latched)
     const std::string file = getLogFileName();
     std::promise<std::optional<BagWriteException>> writeDonePromise;
     auto writeDoneFuture = writeDonePromise.get_future();
-    snapshotter.writeBagFile(file, BagCompression::NONE,
-                             [&writeDonePromise](const std::optional<BagWriteException>& maybeError) {
-                                 writeDonePromise.set_value(maybeError);
-                             });
+    snapshotter.writeBagFile(
+        file, BagCompression::NONE,
+        [&writeDonePromise](const std::optional<BagWriteException>& maybeError, const rclcpp::Time& /*firstTimestamp*/,
+                            const rclcpp::Time& /*lastTimestamp*/) { writeDonePromise.set_value(maybeError); });
     ASSERT_EQ(writeDoneFuture.wait_for(std::chrono::seconds(20)), std::future_status::ready);
     ASSERT_FALSE(writeDoneFuture.get().has_value());
 
@@ -530,10 +530,10 @@ TEST(TestSuite, ServiceLogging)
     const std::string file = getLogFileName();
     std::promise<std::optional<BagWriteException>> writeDonePromise;
     auto writeDoneFuture = writeDonePromise.get_future();
-    snapshotter.writeBagFile(file, BagCompression::NONE,
-                             [&writeDonePromise](const std::optional<BagWriteException>& maybeError) {
-                                 writeDonePromise.set_value(maybeError);
-                             });
+    snapshotter.writeBagFile(
+        file, BagCompression::NONE,
+        [&writeDonePromise](const std::optional<BagWriteException>& maybeError, const rclcpp::Time& /*firstTimestamp*/,
+                            const rclcpp::Time& /*lastTimestamp*/) { writeDonePromise.set_value(maybeError); });
     ASSERT_EQ(writeDoneFuture.wait_for(std::chrono::seconds(20)), std::future_status::ready);
     ASSERT_FALSE(writeDoneFuture.get().has_value());
 
@@ -556,6 +556,100 @@ TEST(TestSuite, ServiceLogging)
     // (REQUEST_SENT, REQUEST_RECEIVED, RESPONSE_SENT, RESPONSE_RECEIVED)
     // At minimum we expect some events to be logged
     ASSERT_GT(serviceEventCount, 0u) << "No service event messages found in bag";
+}
+
+TEST(TestSuite, TimestampCorrectness)
+{
+    Snapshotter::Config cfg;
+    cfg.maxMemoryBytes = 1 * 1024 * 1024 * 1024;
+    Snapshotter snapshotter(*handle, cfg);
+
+    // Record the start time
+    rclcpp::Time startTime = handle->now();
+
+    // Create the publisher after subscribing, otherwise we might miss the first messages
+    DataPublisher pub(*handle);
+
+    ASSERT_TRUE(::subscribeWithTimeout({"test_bool", "test_float"}, std::chrono::seconds(1), snapshotter));
+
+    // spin until both subscribers are connected. This is important, otherwise
+    // we might miss the first few messages (which would cause the test to fail)
+    ASSERT_TRUE(pub.waitForSubscribers({pub.boolPub, pub.floatPub}, std::chrono::seconds(1)));
+
+    // publish everything and wait for the publisher to finish
+    pub.run();
+
+    // Record the end time
+    rclcpp::Time endTime = handle->now();
+
+    const std::string file = getLogFileName();
+    std::promise<std::optional<BagWriteException>> writeDonePromise;
+    std::promise<rclcpp::Time> firstTimestampPromise;
+    std::promise<rclcpp::Time> lastTimestampPromise;
+    auto writeDoneFuture = writeDonePromise.get_future();
+    auto firstTimestampFuture = firstTimestampPromise.get_future();
+    auto lastTimestampFuture = lastTimestampPromise.get_future();
+
+    snapshotter.writeBagFile(file, BagCompression::NONE,
+                             [&](const std::optional<BagWriteException>& error, const rclcpp::Time& firstTimestamp,
+                                 const rclcpp::Time& lastTimestamp) {
+                                 writeDonePromise.set_value(error);
+                                 firstTimestampPromise.set_value(firstTimestamp);
+                                 lastTimestampPromise.set_value(lastTimestamp);
+                             });
+
+    ASSERT_EQ(writeDoneFuture.wait_for(std::chrono::seconds(20)), std::future_status::ready);
+    ASSERT_FALSE(writeDoneFuture.get().has_value());
+
+    // Get the timestamps from the callback
+    ASSERT_EQ(firstTimestampFuture.wait_for(std::chrono::seconds(1)), std::future_status::ready);
+    ASSERT_EQ(lastTimestampFuture.wait_for(std::chrono::seconds(1)), std::future_status::ready);
+
+    rclcpp::Time firstTimestamp = firstTimestampFuture.get();
+    rclcpp::Time lastTimestamp = lastTimestampFuture.get();
+
+    // Verify that timestamps are reasonable
+    ASSERT_GT(firstTimestamp.seconds(), 0.0) << "First timestamp should be positive";
+    ASSERT_GT(lastTimestamp.seconds(), 0.0) << "Last timestamp should be positive";
+    ASSERT_LE(firstTimestamp, lastTimestamp) << "First timestamp should be <= last timestamp";
+
+    // Verify that timestamps are within the expected time range
+    // Allow some tolerance for timing differences
+    ASSERT_GE(firstTimestamp.seconds(), startTime.seconds() - 1.0) << "First timestamp should be close to start time";
+    ASSERT_LE(lastTimestamp.seconds(), endTime.seconds() + 1.0) << "Last timestamp should be close to end time";
+
+    // Verify timestamps by reading the bag file directly
+    flushFilesystem(file);
+    rosbag2_cpp::Reader reader;
+    reader.open(file);
+
+    double bagFirstTimeSeconds = std::numeric_limits<double>::max();
+    double bagLastTimeSeconds = std::numeric_limits<double>::min();
+    bool foundNonLatchedMessage = false;
+
+    while (reader.has_next())
+    {
+        auto bag_message = reader.read_next();
+
+        // Skip latched topics (they are written with artificial timestamps)
+        if (bag_message->topic_name == "test_latched")
+        {
+            continue;
+        }
+
+        double msgTimeSeconds = bag_message->recv_timestamp * 1e-9; // Convert nanoseconds to seconds
+        bagFirstTimeSeconds = std::min(bagFirstTimeSeconds, msgTimeSeconds);
+        bagLastTimeSeconds = std::max(bagLastTimeSeconds, msgTimeSeconds);
+        foundNonLatchedMessage = true;
+    }
+
+    ASSERT_TRUE(foundNonLatchedMessage) << "Should have found non-latched messages";
+
+    // Compare callback timestamps with actual bag timestamps using seconds to avoid time source issues
+    EXPECT_NEAR(firstTimestamp.seconds(), bagFirstTimeSeconds, 0.001)
+        << "First timestamp from callback should match bag first timestamp";
+    EXPECT_NEAR(lastTimestamp.seconds(), bagLastTimeSeconds, 0.001)
+        << "Last timestamp from callback should match bag last timestamp";
 }
 
 // Run all the tests that were declared with TEST()

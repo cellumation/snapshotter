@@ -169,7 +169,7 @@ void Snapshotter::writeBagFile(const std::string& path, BagCompression compressi
     std::unique_lock<std::mutex> lock(writerRunningLock, std::try_to_lock);
     if (!lock.owns_lock())
     {
-        cb(BagWriteException("Snapshotter is already writing a bag file"));
+        cb(BagWriteException("Snapshotter is already writing a bag file"), rclcpp::Time(), rclcpp::Time());
         return;
     }
 
@@ -188,7 +188,7 @@ void Snapshotter::writeBagFile(const std::string& path, BagCompression compressi
             {
                 const std::string msg = "setpriority failed: " + std::string(std::strerror(errno));
                 RCLCPP_ERROR_STREAM(log, msg);
-                cb(BagWriteException(msg));
+                cb(BagWriteException(msg), rclcpp::Time(), rclcpp::Time());
                 return;
             }
         }
@@ -243,27 +243,30 @@ void Snapshotter::writeBagFile(const std::string& path, BagCompression compressi
         {
             writer.open(storageOpts);
 
+            rclcpp::Time firstTimestamp = bufferCopy->getOldestReceiveTime();
+            rclcpp::Time lastTimestamp = bufferCopy->getNewestReceiveTime();
+
             /** write all old latched messages 3 seconds before the actual log starts.
              *  The value 3 is arbitrary. The idea is to make the old latched messages stand out
              *  to a human reader when looking at the bag. We do the calculation in double because rclcpp::Time will
              * throw when the time becomes negative (which can happen when running in simulation because sim time
              * starts at 0) */
-            rclcpp::Time latchedTime = bufferCopy->getOldestReceiveTime() - std::chrono::seconds(3);
+            rclcpp::Time latchedTime = firstTimestamp - std::chrono::seconds(3);
             latchedTime = std::max(latchedTime, rclcpp::Time(static_cast<int64_t>(0), RCL_ROS_TIME));
             latchedBufferCopy->writeToBag(writer, metaData, latchedTime);
 
             bufferCopy->writeToBag(writer, metaData);
             writer.close();
 
-            cb(std::nullopt);
+            cb(std::nullopt, firstTimestamp, lastTimestamp);
         }
         catch (const std::exception& e)
         {
-            cb(BagWriteException(e.what()));
+            cb(BagWriteException(e.what()), rclcpp::Time(), rclcpp::Time());
         }
         catch (...) // we really really don't want to crash :D
         {
-            cb(BagWriteException("unknown error"));
+            cb(BagWriteException("unknown error"), rclcpp::Time(), rclcpp::Time());
         }
         const auto elapsedTime =
             std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - startTime);

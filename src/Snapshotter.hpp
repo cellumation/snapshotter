@@ -75,8 +75,11 @@ public:
     /** The callback will be invoked when the writing is either done or an error occurred.
      *  It will be invoked from a different thread than the one that called writeBagFile.
      *  @note The callback may not throw an exception.
-     *  @p error will contain the error, if any error occurred. If writing finished successfully it will be nullopt.*/
-    using WriteDoneCb = std::function<void(const std::optional<BagWriteException>& error)>;
+     *  @p error will contain the error, if any error occurred. If writing finished successfully it will be nullopt.
+     *  @p firstTimestamp will be the first timestamp in the bag (excluding latched topics).
+     *  @p lastTimestamp will be the last timestamp in the bag.*/
+    using WriteDoneCb = std::function<void(const std::optional<BagWriteException>& error,
+                                           const rclcpp::Time& firstTimestamp, const rclcpp::Time& lastTimestamp)>;
 
     /** async writes the bag file.
      *  Recording of data continues while writing.

@@ -161,4 +161,20 @@ rclcpp::Time MessageRingBuffer::getOldestReceiveTime() const
     return oldestTime;
 }
 
+rclcpp::Time MessageRingBuffer::getNewestReceiveTime() const
+{
+    std::scoped_lock lock(bufferLock);
+    if (buffer.empty())
+    {
+        return minValidTimeStamp;
+    }
+
+    rclcpp::Time newestTime = buffer.front().receiveTime;
+    for (const BufferEntry& entry : buffer)
+    {
+        newestTime = std::max(newestTime, entry.receiveTime);
+    }
+    return newestTime;
+}
+
 } // namespace snapshotter
