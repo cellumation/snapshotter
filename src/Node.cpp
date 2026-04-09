@@ -32,28 +32,38 @@ void SnapshotNode::handleRequest(const std::shared_ptr<rmw_request_id_t> header,
         snapshotter::srv::TakeSnapshot::Response resp;
         resp.message = "Already taking snapshot";
         resp.success = false;
+        resp.first_timestamp.sec = 0;
+        resp.first_timestamp.nanosec = 0;
+        resp.last_timestamp.sec = 0;
+        resp.last_timestamp.nanosec = 0;
         service->send_response(*header, resp);
         return;
     }
 
-    snapshotter.writeBagFile(req->filename, compression, [this, header](const std::optional<BagWriteException>& error) {
-        snapshotter::srv::TakeSnapshot::Response resp;
-        resp.success = !error.has_value();
-        if (error)
-        {
-            resp.message = error->what();
-        }
-        try
-        {
-            service->send_response(*header, resp);
-        }
-        catch (...)
-        {
-            // catch everything because we need to make sure that the mutex is always unlocked
-            RCLCPP_ERROR_STREAM(nh.get_logger(), "Failed to send service response");
-        }
-        takeSnapshotServiceLock.unlock();
-    });
+    snapshotter.writeBagFile(req->filename, compression,
+                             [this, header](const std::optional<BagWriteException>& error,
+                                            const rclcpp::Time& firstTimestamp, const rclcpp::Time& lastTimestamp) {
+                                 snapshotter::srv::TakeSnapshot::Response resp;
+                                 resp.success = !error.has_value();
+                                 if (error)
+                                 {
+                                     resp.message = error->what();
+                                 }
+                                 resp.first_timestamp =
+                                     rclcpp::convert_rcl_time_to_sec_nanos(firstTimestamp.nanoseconds());
+                                 resp.last_timestamp =
+                                     rclcpp::convert_rcl_time_to_sec_nanos(lastTimestamp.nanoseconds());
+                                 try
+                                 {
+                                     service->send_response(*header, resp);
+                                 }
+                                 catch (...)
+                                 {
+                                     // catch everything because we need to make sure that the mutex is always unlocked
+                                     RCLCPP_ERROR_STREAM(nh.get_logger(), "Failed to send service response");
+                                 }
+                                 takeSnapshotServiceLock.unlock();
+                             });
 }
 
 void SnapshotNode::subscribeTopics()

@@ -82,6 +82,10 @@ public:
      *  is thread-safe */
     rclcpp::Time getOldestReceiveTime() const;
 
+    /** Returns the newest received-timestamp currently present in the buffer.
+     *  is thread-safe */
+    rclcpp::Time getNewestReceiveTime() const;
+
     void setDroppedCb(std::function<void(BufferEntry&&)> cb);
 
 private:
