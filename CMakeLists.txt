@@ -64,9 +64,15 @@ if(BUILD_TESTING)
 
     ament_add_gtest(utest test/test.test test/test_node.cpp)
     target_include_directories(utest PRIVATE src)
-
     target_link_libraries(utest ${PROJECT_NAME}_lib)
     ament_target_dependencies(utest std_srvs)
+
+    ament_add_gtest(utest_reduction_rules test/test_reduction_rules.cpp)
+    target_include_directories(utest_reduction_rules PRIVATE src)
+    target_link_libraries(utest_reduction_rules ${PROJECT_NAME}_lib)
+    target_compile_definitions(utest_reduction_rules PRIVATE
+        TEST_PARAMS_FILE="${CMAKE_CURRENT_SOURCE_DIR}/test/test_reduction_rules_params.yaml"
+    )
 endif()
 
 ament_package()

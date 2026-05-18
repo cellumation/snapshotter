@@ -33,6 +33,7 @@
  ********************************************************************/
 #pragma once
 #include "Common.hpp"
+#include "ReductionRule.hpp"
 #include <deque>
 #include <functional>
 #include <mutex>
@@ -73,6 +74,18 @@ public:
      *  @param topicMetadata Array of metadata of all subscribed topics.
      */
     void writeToBag(rosbag2_cpp::Writer& writer, const std::vector<TopicMetadata>& topicMetadata) const;
+
+    /** Writes the content of the buffer to a bag file, applying reduction rules.
+     *  The first matching rule wins per topic:
+     *    - dropTopic: the topic is skipped entirely.
+     *    - reduceRateTo: only the first sample per 1/rate interval is written.
+     *  Topics with no matching rule are written in full.
+     *  Entries whose receiveTime predates @p firstTimestamp are treated as latched
+     *  and are never rate-limited or dropped.
+     *  @throw BagWriteException in case of error
+     *  is thread-safe */
+    void writeToBag(rosbag2_cpp::Writer& writer, const std::vector<TopicMetadata>& topicMetadata,
+                    const std::vector<ReductionRule>& rules) const;
 
     /** Removes all entries from this buffer.
      *  is thread-safe */

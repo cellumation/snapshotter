@@ -1,5 +1,6 @@
 
 #include "Common.hpp"
+#include "ReductionRule.hpp"
 #include "Snapshotter.hpp"
 #include <cerrno>
 #include <cstring>
@@ -306,9 +307,10 @@ TEST(TestSuite, SimpleTest)
     pub.run();
 
     const std::string file = getLogFileName();
+    const std::string reducedFile = getLogFileName();
     std::promise<std::optional<BagWriteException>> writeDonePromise;
     auto writeDoneFuture = writeDonePromise.get_future();
-    snapshotter.writeBagFile(file, BagCompression::NONE,
+    snapshotter.writeBagFile(file, std::optional<std::string>(reducedFile), BagCompression::NONE,
                              [&](const std::optional<BagWriteException>& maybeError,
                                  const rclcpp::Time& /*firstTimestamp*/,
                                  const rclcpp::Time& /*lastTimestamp*/) { writeDonePromise.set_value(maybeError); });
@@ -317,6 +319,8 @@ TEST(TestSuite, SimpleTest)
     flushFilesystem(file);
     pub.checkBoolMsgs(file, false);
     pub.checkFloatMsgs(file, false);
+    pub.checkBoolMsgs(reducedFile, false);
+    pub.checkFloatMsgs(reducedFile, false);
 }
 
 TEST(TestSuite, DropAllMsgs)
@@ -336,10 +340,11 @@ TEST(TestSuite, DropAllMsgs)
     pub.run();
 
     const std::string file = getLogFileName();
+    const std::string reducedFile = getLogFileName();
     std::promise<std::optional<BagWriteException>> writeDonePromise;
     auto writeDoneFuture = writeDonePromise.get_future();
     snapshotter.writeBagFile(
-        file, BagCompression::NONE,
+        file, reducedFile, BagCompression::NONE,
         [&writeDonePromise](const std::optional<BagWriteException>& maybeError, const rclcpp::Time& /*firstTimestamp*/,
                             const rclcpp::Time& /*lastTimestamp*/) { writeDonePromise.set_value(maybeError); });
     ASSERT_EQ(writeDoneFuture.wait_for(std::chrono::seconds(20)), std::future_status::ready);
@@ -375,10 +380,11 @@ TEST(TestSuite, DropSomeMsgs)
     pub.run();
 
     const std::string file = getLogFileName();
+    const std::string reducedFile = getLogFileName();
     std::promise<std::optional<BagWriteException>> writeDonePromise;
     auto writeDoneFuture = writeDonePromise.get_future();
     snapshotter.writeBagFile(
-        file, BagCompression::NONE,
+        file, reducedFile, BagCompression::NONE,
         [&writeDonePromise](const std::optional<BagWriteException>& maybeError, const rclcpp::Time& /*firstTimestamp*/,
                             const rclcpp::Time& /*lastTimestamp*/) { writeDonePromise.set_value(maybeError); });
     ASSERT_EQ(writeDoneFuture.wait_for(std::chrono::seconds(20)), std::future_status::ready);
@@ -433,10 +439,11 @@ TEST(TestSuite, Latched)
     pub.run();
 
     const std::string file = getLogFileName();
+    const std::string reducedFile = getLogFileName();
     std::promise<std::optional<BagWriteException>> writeDonePromise;
     auto writeDoneFuture = writeDonePromise.get_future();
     snapshotter.writeBagFile(
-        file, BagCompression::NONE,
+        file, reducedFile, BagCompression::NONE,
         [&writeDonePromise](const std::optional<BagWriteException>& maybeError, const rclcpp::Time& /*firstTimestamp*/,
                             const rclcpp::Time& /*lastTimestamp*/) { writeDonePromise.set_value(maybeError); });
     ASSERT_EQ(writeDoneFuture.wait_for(std::chrono::seconds(20)), std::future_status::ready);
@@ -528,10 +535,11 @@ TEST(TestSuite, ServiceLogging)
     ::spin(100);
 
     const std::string file = getLogFileName();
+    const std::string reducedFile = getLogFileName();
     std::promise<std::optional<BagWriteException>> writeDonePromise;
     auto writeDoneFuture = writeDonePromise.get_future();
     snapshotter.writeBagFile(
-        file, BagCompression::NONE,
+        file, reducedFile, BagCompression::NONE,
         [&writeDonePromise](const std::optional<BagWriteException>& maybeError, const rclcpp::Time& /*firstTimestamp*/,
                             const rclcpp::Time& /*lastTimestamp*/) { writeDonePromise.set_value(maybeError); });
     ASSERT_EQ(writeDoneFuture.wait_for(std::chrono::seconds(20)), std::future_status::ready);
@@ -590,7 +598,8 @@ TEST(TestSuite, TimestampCorrectness)
     auto firstTimestampFuture = firstTimestampPromise.get_future();
     auto lastTimestampFuture = lastTimestampPromise.get_future();
 
-    snapshotter.writeBagFile(file, BagCompression::NONE,
+    const std::string reducedFile = getLogFileName();
+    snapshotter.writeBagFile(file, std::optional<std::string>(reducedFile), BagCompression::NONE,
                              [&](const std::optional<BagWriteException>& error, const rclcpp::Time& firstTimestamp,
                                  const rclcpp::Time& lastTimestamp) {
                                  writeDonePromise.set_value(error);
@@ -650,6 +659,122 @@ TEST(TestSuite, TimestampCorrectness)
         << "First timestamp from callback should match bag first timestamp";
     EXPECT_NEAR(lastTimestamp.seconds(), bagLastTimeSeconds, 0.001)
         << "Last timestamp from callback should match bag last timestamp";
+}
+
+TEST(TestSuite, ReducedBagDropTopic)
+{
+    Snapshotter::Config cfg;
+    cfg.maxMemoryBytes = 1 * 1024 * 1024 * 1024;
+
+    ReductionRule dropBool;
+    dropBool.topicRegexp = std::regex("test_bool");
+    dropBool.action = ReductionRule::Action::dropTopic;
+    dropBool.rate = 0.0;
+    cfg.reductionRules.push_back(dropBool);
+
+    Snapshotter snapshotter(*handle, cfg);
+
+    DataPublisher pub(*handle);
+    ASSERT_TRUE(::subscribeWithTimeout({"test_bool", "test_float"}, std::chrono::seconds(1), snapshotter));
+    ASSERT_TRUE(pub.waitForSubscribers({pub.boolPub, pub.floatPub}, std::chrono::seconds(1)));
+    pub.run();
+
+    const std::string file = getLogFileName();
+    const std::string reducedFile = getLogFileName();
+    std::promise<std::optional<BagWriteException>> writeDonePromise;
+    auto writeDoneFuture = writeDonePromise.get_future();
+    snapshotter.writeBagFile(
+        file, reducedFile, BagCompression::NONE,
+        [&writeDonePromise](const std::optional<BagWriteException>& maybeError, const rclcpp::Time& /*firstTimestamp*/,
+                            const rclcpp::Time& /*lastTimestamp*/) { writeDonePromise.set_value(maybeError); });
+    ASSERT_EQ(writeDoneFuture.wait_for(std::chrono::seconds(20)), std::future_status::ready);
+    ASSERT_FALSE(writeDoneFuture.get().has_value());
+
+    flushFilesystem(file);
+    flushFilesystem(reducedFile);
+
+    // main bag must contain test_bool
+    pub.checkBoolMsgs(file, false);
+
+    // reduced bag must NOT contain test_bool, but must still contain test_float
+    {
+        rosbag2_cpp::Reader reader;
+        reader.open(reducedFile);
+        for (const auto& topicInfo : reader.get_metadata().topics_with_message_count)
+        {
+            ASSERT_NE(topicInfo.topic_metadata.name, pub.boolPub->get_topic_name())
+                << "dropped topic must not appear in reduced bag";
+        }
+    }
+    pub.checkFloatMsgs(reducedFile, false);
+}
+
+TEST(TestSuite, ReducedBagReduceRate)
+{
+    Snapshotter::Config cfg;
+    cfg.maxMemoryBytes = 1 * 1024 * 1024 * 1024;
+
+    // Limit test_bool to 1 sample/s; the publisher fires at ~1 kHz so we expect a large reduction.
+    ReductionRule rateRule;
+    rateRule.topicRegexp = std::regex("test_bool");
+    rateRule.action = ReductionRule::Action::reduceRateTo;
+    rateRule.rate = 1.0;
+    cfg.reductionRules.push_back(rateRule);
+
+    Snapshotter snapshotter(*handle, cfg);
+
+    DataPublisher pub(*handle);
+    ASSERT_TRUE(::subscribeWithTimeout({"test_bool", "test_float"}, std::chrono::seconds(1), snapshotter));
+    ASSERT_TRUE(pub.waitForSubscribers({pub.boolPub, pub.floatPub}, std::chrono::seconds(1)));
+    ::spin(20);
+    pub.run();
+
+    const std::string file = getLogFileName();
+    const std::string reducedFile = getLogFileName();
+    std::promise<std::optional<BagWriteException>> writeDonePromise;
+    auto writeDoneFuture = writeDonePromise.get_future();
+    snapshotter.writeBagFile(
+        file, reducedFile, BagCompression::NONE,
+        [&writeDonePromise](const std::optional<BagWriteException>& maybeError, const rclcpp::Time& /*firstTimestamp*/,
+                            const rclcpp::Time& /*lastTimestamp*/) { writeDonePromise.set_value(maybeError); });
+    ASSERT_EQ(writeDoneFuture.wait_for(std::chrono::seconds(20)), std::future_status::ready);
+    ASSERT_FALSE(writeDoneFuture.get().has_value());
+
+    flushFilesystem(file);
+    flushFilesystem(reducedFile);
+
+    // Count test_bool messages in both bags
+    size_t fullBoolCount = 0;
+    size_t reducedBoolCount = 0;
+
+    {
+        rosbag2_cpp::Reader reader;
+        reader.open(file);
+        for (const auto& topicInfo : reader.get_metadata().topics_with_message_count)
+        {
+            if (topicInfo.topic_metadata.name == "test_bool")
+            {
+                fullBoolCount = topicInfo.message_count;
+            }
+        }
+    }
+    {
+        rosbag2_cpp::Reader reader;
+        reader.open(reducedFile);
+        for (const auto& topicInfo : reader.get_metadata().topics_with_message_count)
+        {
+            if (topicInfo.topic_metadata.name == "test_bool")
+            {
+                reducedBoolCount = topicInfo.message_count;
+            }
+        }
+    }
+
+    ASSERT_GT(fullBoolCount, 0u) << "main bag should contain bool messages";
+    // reduced bag should have far fewer bool messages than the full bag
+    ASSERT_LT(reducedBoolCount, fullBoolCount) << "reduced bag should have fewer bool messages than full bag";
+    // test_float is not rate-limited and must be fully present in reduced bag
+    pub.checkFloatMsgs(reducedFile, true);
 }
 
 // Run all the tests that were declared with TEST()

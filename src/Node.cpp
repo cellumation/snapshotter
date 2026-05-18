@@ -40,7 +40,10 @@ void SnapshotNode::handleRequest(const std::shared_ptr<rmw_request_id_t> header,
         return;
     }
 
-    snapshotter.writeBagFile(req->filename, compression,
+    std::optional<std::string> reducedPath =
+        req->reduced_filename.empty() ? std::nullopt : std::optional<std::string>(req->reduced_filename);
+
+    snapshotter.writeBagFile(req->filename, reducedPath, compression,
                              [this, header](const std::optional<BagWriteException>& error,
                                             const rclcpp::Time& firstTimestamp, const rclcpp::Time& lastTimestamp) {
                                  snapshotter::srv::TakeSnapshot::Response resp;

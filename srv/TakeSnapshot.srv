@@ -1,4 +1,5 @@
-string filename   # Name of bag file to save snapshot to. Needs to be a full path ending in .bag
+string filename           # Name of bag file to save snapshot to. Needs to be a full path ending in .bag
+string reduced_filename   # Optional: name of reduced bag file. If empty no reduced snapshot will be written.
 ---
 
 bool success    # True if snapshot succesfully written to disk

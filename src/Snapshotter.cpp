@@ -154,7 +154,8 @@ bool Snapshotter::subscribeService(const std::string& serviceName)
     return subscribe(eventTopic);
 }
 
-void Snapshotter::writeBagFile(const std::string& path, BagCompression compression, const WriteDoneCb& cb)
+void Snapshotter::writeBagFile(const std::string& path, std::optional<std::string> reducedPath,
+                               BagCompression compression, const WriteDoneCb& cb)
 {
     // writing is done in a separate thread because errors might happen
     // during writing and there is no guaranteed way to reset the
@@ -173,7 +174,7 @@ void Snapshotter::writeBagFile(const std::string& path, BagCompression compressi
         return;
     }
 
-    writer = std::jthread([path, compression, cb, this, lock = std::move(lock)]() mutable {
+    writer = std::jthread([path, reducedPath, compression, cb, this, lock = std::move(lock)]() mutable {
         using namespace rosbag2_cpp;
 
         // move lock to local scope to ensure that it is released when the lambda execution ends
@@ -257,6 +258,21 @@ void Snapshotter::writeBagFile(const std::string& path, BagCompression compressi
 
             bufferCopy->writeToBag(writer, metaData);
             writer.close();
+
+            if (reducedPath.has_value())
+            {
+                std::unique_ptr<rosbag2_cpp::writer_interfaces::BaseWriterInterface> reducedWriterImpl;
+                reducedWriterImpl = std::make_unique<rosbag2_cpp::writers::SequentialWriter>();
+                rosbag2_cpp::Writer reducedWriter(std::move(reducedWriterImpl));
+
+                rosbag2_storage::StorageOptions reducedStorageOpts = storageOpts;
+                reducedStorageOpts.uri = *reducedPath;
+                reducedWriter.open(reducedStorageOpts);
+
+                latchedBufferCopy->writeToBag(reducedWriter, metaData, latchedTime);
+                bufferCopy->writeToBag(reducedWriter, metaData, cfg.reductionRules);
+                reducedWriter.close();
+            }
 
             cb(std::nullopt, firstTimestamp, lastTimestamp);
         }

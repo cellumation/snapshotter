@@ -33,6 +33,7 @@
  ********************************************************************/
 
 #include "Node.hpp"
+#include "ReductionRule.hpp"
 #include "Snapshotter.hpp"
 #include "TopicFilter.hpp"
 
@@ -151,6 +152,7 @@ int main(int argc, char** argv)
     }
     cfg.maxMemoryBytes = size_t(maxMemoryMb) * size_t(1024 * 1024);
     cfg.niceOnWrite = nh.get_parameter("nice_on_write").as_bool();
+    cfg.reductionRules = snapshotter::parseReductionRules(nh);
 
     BagCompression compression = getCompression(nh);
 
