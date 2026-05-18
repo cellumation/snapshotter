@@ -34,6 +34,7 @@
 #pragma once
 #include "Common.hpp"
 #include "MessageRingBuffer.hpp"
+#include "ReductionRule.hpp"
 #include "SingleMessageBuffer.hpp"
 #include <atomic>
 #include <memory>
@@ -56,6 +57,8 @@ public:
         /** If true the snapshotter will set the thread nice value to 19 when
          *  writing a bag file. see manpage setpriority(2) for details. */
         bool niceOnWrite;
+        /** Rules applied when writing the reduced snapshot. First matching rule wins. */
+        std::vector<ReductionRule> reductionRules;
     };
 
     Snapshotter(rclcpp::Node& nh, const Config& cfg);
@@ -84,8 +87,10 @@ public:
     /** async writes the bag file.
      *  Recording of data continues while writing.
      *  This method is not blocking.
+     *  @param reducedPath path for the reduced snapshot bag. If nullopt no reduced bag is written.
      *  @param cb will be invoked when the writing is either done or an error occurred.*/
-    void writeBagFile(const std::string& path, BagCompression compression, const WriteDoneCb& cb);
+    void writeBagFile(const std::string& path, std::optional<std::string> reducedPath, BagCompression compression,
+                      const WriteDoneCb& cb);
 
 private:
     void topicCB(const SerializedMsgPtr& msg, const TopicMetadata& md);

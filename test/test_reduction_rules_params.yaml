@@ -1,0 +1,10 @@
+reduction_rules_tester:
+  ros__parameters:
+    reduction_drop_topics:
+      - "/camera/image_raw"
+    reduction_reduce_topics:
+      - "/lidar/.*"
+      - "/imu/data"
+    reduction_reduce_rates:
+      - 2.5
+      - 10.0

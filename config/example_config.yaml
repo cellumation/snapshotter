@@ -39,3 +39,17 @@ snapshotter:
 
         # A list of regexes that should be include even though it matches the exclude pattern.
         include_topics: ['']
+
+        # Optional rules to reduce the memory footprint of the reduced snapshot.
+        # Topics matching a reduction_drop_topics regexp are omitted from the reduced snapshot entirely.
+        # Topics matching a reduction_reduce_topics entry are written at most at the corresponding
+        # reduction_reduce_rates value (samples/s). Latched messages older than the bag start are always kept.
+        # Drop rules are evaluated before rate-reduce rules.
+        reduction_drop_topics:
+          - "/camera/image_raw"
+        reduction_reduce_topics:
+          - "/lidar/.*"
+          - "/imu/data"
+        reduction_reduce_rates:
+          - 2.5
+          - 10.0
