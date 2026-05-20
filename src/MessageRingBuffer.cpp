@@ -154,7 +154,9 @@ void MessageRingBuffer::writeToBag(rosbag2_cpp::Writer& writer, const std::vecto
         const ReductionRule* matched = nullptr;
         for (const ReductionRule& rule : rules)
         {
-            if (std::regex_match(topicName, rule.topicRegexp))
+            const std::regex& topicRegexp =
+                std::visit([](const auto& r) -> const std::regex& { return r.topicRegexp; }, rule);
+            if (std::regex_match(topicName, topicRegexp))
             {
                 matched = &rule;
                 break;
@@ -171,27 +173,38 @@ void MessageRingBuffer::writeToBag(rosbag2_cpp::Writer& writer, const std::vecto
         const ReductionRule* rule = ruleForTopic.at(entry.topicMetaDataIdx);
         if (rule)
         {
-            if (rule->action == ReductionRule::Action::dropTopic)
+            const bool shouldWrite = std::visit(
+                [&](const auto& r) -> bool {
+                    using T = std::decay_t<decltype(r)>;
+                    if constexpr (std::is_same_v<T, DropRule>)
+                    {
+                        return false; // drop this message
+                    }
+                    else if constexpr (std::is_same_v<T, ReduceRule>)
+                    {
+                        auto it = lastWrittenTime.find(entry.topicMetaDataIdx);
+                        if (it == lastWrittenTime.end())
+                        {
+                            lastWrittenTime.emplace(entry.topicMetaDataIdx, entry.receiveTime);
+                            return true;
+                        }
+                        else
+                        {
+                            const rclcpp::Duration elapsed = entry.receiveTime - it->second;
+                            if (elapsed < r.minInterval)
+                            {
+                                return false; // skip this message
+                            }
+                            it->second = entry.receiveTime;
+                            return true;
+                        }
+                    }
+                },
+                *rule);
+
+            if (!shouldWrite)
             {
                 continue;
-            }
-            if (rule->action == ReductionRule::Action::reduceRateTo)
-            {
-                auto it = lastWrittenTime.find(entry.topicMetaDataIdx);
-                if (it == lastWrittenTime.end())
-                {
-                    lastWrittenTime.emplace(entry.topicMetaDataIdx, entry.receiveTime);
-                }
-                else
-                {
-                    const double minIntervalNs = 1.0e9 / rule->rate;
-                    const double elapsed = static_cast<double>((entry.receiveTime - it->second).nanoseconds());
-                    if (elapsed < minIntervalNs)
-                    {
-                        continue;
-                    }
-                    it->second = entry.receiveTime;
-                }
             }
         }
 

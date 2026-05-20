@@ -48,21 +48,21 @@ TEST(ReductionRulesParsing, ParsesAllRulesFromYaml)
     ASSERT_EQ(rules.size(), 3u);
 
     // Rule 0: drop_topic (from drop_topics list)
-    EXPECT_EQ(rules[0].action, ReductionRule::Action::dropTopic);
-    EXPECT_TRUE(std::regex_match("/camera/image_raw", rules[0].topicRegexp));
-    EXPECT_FALSE(std::regex_match("/camera/image_raw/other", rules[0].topicRegexp));
+    EXPECT_TRUE(std::holds_alternative<DropRule>(rules[0]));
+    EXPECT_TRUE(std::regex_match("/camera/image_raw", std::get<DropRule>(rules[0]).topicRegexp));
+    EXPECT_FALSE(std::regex_match("/camera/image_raw/other", std::get<DropRule>(rules[0]).topicRegexp));
 
     // Rule 1: reduce_rate_to 2.5 Hz (first entry in reduce_rate_regexps)
-    EXPECT_EQ(rules[1].action, ReductionRule::Action::reduceRateTo);
-    EXPECT_DOUBLE_EQ(rules[1].rate, 2.5);
-    EXPECT_TRUE(std::regex_match("/lidar/points", rules[1].topicRegexp));
-    EXPECT_TRUE(std::regex_match("/lidar/scan", rules[1].topicRegexp));
-    EXPECT_FALSE(std::regex_match("/lidar", rules[1].topicRegexp));
+    EXPECT_TRUE(std::holds_alternative<ReduceRule>(rules[1]));
+    EXPECT_EQ(std::get<ReduceRule>(rules[1]).minInterval, rclcpp::Duration::from_seconds(1.0 / 2.5));
+    EXPECT_TRUE(std::regex_match("/lidar/points", std::get<ReduceRule>(rules[1]).topicRegexp));
+    EXPECT_TRUE(std::regex_match("/lidar/scan", std::get<ReduceRule>(rules[1]).topicRegexp));
+    EXPECT_FALSE(std::regex_match("/lidar", std::get<ReduceRule>(rules[1]).topicRegexp));
 
     // Rule 2: reduce_rate_to 10 Hz (second entry in reduce_rate_regexps)
-    EXPECT_EQ(rules[2].action, ReductionRule::Action::reduceRateTo);
-    EXPECT_DOUBLE_EQ(rules[2].rate, 10.0);
-    EXPECT_TRUE(std::regex_match("/imu/data", rules[2].topicRegexp));
+    EXPECT_TRUE(std::holds_alternative<ReduceRule>(rules[2]));
+    EXPECT_EQ(std::get<ReduceRule>(rules[2]).minInterval, rclcpp::Duration::from_seconds(1.0 / 10.0));
+    EXPECT_TRUE(std::regex_match("/imu/data", std::get<ReduceRule>(rules[2]).topicRegexp));
 }
 
 TEST(ReductionRulesParsing, EmptyWhenNoRulesDeclared)

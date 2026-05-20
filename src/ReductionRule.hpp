@@ -32,26 +32,28 @@
  *  POSSIBILITY OF SUCH DAMAGE.
  ********************************************************************/
 #pragma once
+#include <rclcpp/duration.hpp>
 #include <rclcpp/node.hpp>
 #include <regex>
 #include <string>
+#include <variant>
 #include <vector>
 
 namespace snapshotter
 {
 
-struct ReductionRule
+struct DropRule
 {
-    enum class Action
-    {
-        dropTopic,
-        reduceRateTo
-    };
-
     std::regex topicRegexp;
-    Action action;
-    double rate; ///< samples/s, only used when action == reduceRateTo
 };
+
+struct ReduceRule
+{
+    std::regex topicRegexp;
+    rclcpp::Duration minInterval;
+};
+
+using ReductionRule = std::variant<DropRule, ReduceRule>;
 
 /** Parses reduction_rules from node parameters.
  *  Expected parameter layout (using automatically_declare_parameters_from_overrides):
@@ -69,18 +71,14 @@ inline std::vector<ReductionRule> parseReductionRules(rclcpp::Node& nh)
         const auto dropTopics = nh.get_parameter("reduction_drop_topics").as_string_array();
         for (const auto& topic : dropTopics)
         {
-            ReductionRule rule;
-            rule.action = ReductionRule::Action::dropTopic;
-            rule.rate = 0.0;
             try
             {
-                rule.topicRegexp = std::regex(topic);
+                rules.emplace_back(DropRule{.topicRegexp = std::regex(topic)});
             }
             catch (const std::regex_error& e)
             {
                 throw std::runtime_error(std::string("Invalid regexp in reduction_drop_topics: ") + e.what());
             }
-            rules.push_back(std::move(rule));
         }
     }
 
@@ -102,19 +100,16 @@ inline std::vector<ReductionRule> parseReductionRules(rclcpp::Node& nh)
             {
                 throw std::runtime_error("reduction_reduce_rates[" + std::to_string(i) + "] must be > 0");
             }
-            ReductionRule rule;
-            rule.action = ReductionRule::Action::reduceRateTo;
-            rule.rate = rates[i];
             try
             {
-                rule.topicRegexp = std::regex(regexps[i]);
+                rules.emplace_back(ReduceRule{.topicRegexp = std::regex(regexps[i]),
+                                              .minInterval = rclcpp::Duration::from_seconds(1.0 / rates[i])});
             }
             catch (const std::regex_error& e)
             {
                 throw std::runtime_error("Invalid regexp in reduction_reduce_topics[" + std::to_string(i) +
                                          "]: " + e.what());
             }
-            rules.push_back(std::move(rule));
         }
     }
 

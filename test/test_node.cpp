@@ -666,11 +666,7 @@ TEST(TestSuite, ReducedBagDropTopic)
     Snapshotter::Config cfg;
     cfg.maxMemoryBytes = 1 * 1024 * 1024 * 1024;
 
-    ReductionRule dropBool;
-    dropBool.topicRegexp = std::regex("test_bool");
-    dropBool.action = ReductionRule::Action::dropTopic;
-    dropBool.rate = 0.0;
-    cfg.reductionRules.push_back(dropBool);
+    cfg.reductionRules.emplace_back(DropRule{std::regex("test_bool")});
 
     Snapshotter snapshotter(*handle, cfg);
 
@@ -715,11 +711,7 @@ TEST(TestSuite, ReducedBagReduceRate)
     cfg.maxMemoryBytes = 1 * 1024 * 1024 * 1024;
 
     // Limit test_bool to 1 sample/s; the publisher fires at ~1 kHz so we expect a large reduction.
-    ReductionRule rateRule;
-    rateRule.topicRegexp = std::regex("test_bool");
-    rateRule.action = ReductionRule::Action::reduceRateTo;
-    rateRule.rate = 1.0;
-    cfg.reductionRules.push_back(rateRule);
+    cfg.reductionRules.emplace_back(ReduceRule{std::regex("test_bool"), rclcpp::Duration::from_seconds(1.0)});
 
     Snapshotter snapshotter(*handle, cfg);
 
