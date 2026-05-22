@@ -14,7 +14,6 @@ find_package(rosbag2_compression REQUIRED)
 find_package(rosbag2_transport REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(std_srvs REQUIRED)
-find_package(cm_executors REQUIRED)
 find_package(rosidl_default_generators REQUIRED)
 
 rosidl_generate_interfaces(
@@ -44,7 +43,6 @@ target_link_libraries(
 add_executable(${PROJECT_NAME}_node src/main.cpp)
 target_link_libraries(${PROJECT_NAME}_node
   ${PROJECT_NAME}_lib
-  cm_executors::cm_executors
   ${cpp_typesupport_target}
 )
 
@@ -64,8 +62,7 @@ if(BUILD_TESTING)
 
     ament_add_gtest(utest test/test.test test/test_node.cpp)
     target_include_directories(utest PRIVATE src)
-    target_link_libraries(utest ${PROJECT_NAME}_lib)
-    ament_target_dependencies(utest std_srvs)
+    target_link_libraries(utest ${PROJECT_NAME}_lib ${std_srvs_TARGETS})
 
     ament_add_gtest(utest_reduction_rules test/test_reduction_rules.cpp)
     target_include_directories(utest_reduction_rules PRIVATE src)
