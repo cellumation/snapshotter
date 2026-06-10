@@ -13,6 +13,7 @@ find_package(rosbag2_cpp REQUIRED)
 find_package(rosbag2_compression REQUIRED)
 find_package(rosbag2_transport REQUIRED)
 find_package(std_msgs REQUIRED)
+find_package(std_srvs REQUIRED)
 find_package(rosidl_default_generators REQUIRED)
 
 rosidl_generate_interfaces(
@@ -61,8 +62,14 @@ if(BUILD_TESTING)
 
     ament_add_gtest(utest test/test.test test/test_node.cpp)
     target_include_directories(utest PRIVATE src)
+    target_link_libraries(utest ${PROJECT_NAME}_lib ${std_srvs_TARGETS})
 
-    target_link_libraries(utest ${PROJECT_NAME}_lib)
+    ament_add_gtest(utest_reduction_rules test/test_reduction_rules.cpp)
+    target_include_directories(utest_reduction_rules PRIVATE src)
+    target_link_libraries(utest_reduction_rules ${PROJECT_NAME}_lib)
+    target_compile_definitions(utest_reduction_rules PRIVATE
+        TEST_PARAMS_FILE="${CMAKE_CURRENT_SOURCE_DIR}/test/test_reduction_rules_params.yaml"
+    )
 endif()
 
 ament_package()

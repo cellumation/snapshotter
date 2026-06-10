@@ -32,15 +32,18 @@
  *  POSSIBILITY OF SUCH DAMAGE.
  ********************************************************************/
 
+#include "Node.hpp"
+#include "ReductionRule.hpp"
 #include "Snapshotter.hpp"
 #include "TopicFilter.hpp"
 
-#include "Node.hpp"
+#include <rclcpp/executors/events_cbg_executor/events_cbg_executor.hpp>
 #include <rclcpp/executors.hpp>
 #include <rclcpp/logging.hpp>
 #include <rclcpp/node.hpp>
 #include <rclcpp/timer.hpp>
 #include <snapshotter/srv/take_snapshot.hpp>
+
 #include <string>
 #include <vector>
 
@@ -94,6 +97,8 @@ int main(int argc, char** argv)
     allParamsSet &= checkParameter("nice_on_write", false);
     allParamsSet &= checkParameter("exclude_topics", true);
     allParamsSet &= checkParameter("include_topics", true);
+    allParamsSet &= checkParameter("exclude_services", true);
+    allParamsSet &= checkParameter("include_services", true);
     allParamsSet &= checkParameter("bag_compression", false);
     allParamsSet &= checkParameter("process_frequency", false);
     allParamsSet &= checkParameter("keep_latched", false);
@@ -118,7 +123,17 @@ int main(int argc, char** argv)
     {
         includeRegexes = nh.get_parameter("include_topics").as_string_array();
     }
-    TopicFilter topicFilter(excludeRegexes, includeRegexes);
+    std::vector<std::string> excludeServiceRegexes;
+    if (nh.has_parameter("exclude_services"))
+    {
+        excludeServiceRegexes = nh.get_parameter("exclude_services").as_string_array();
+    }
+    std::vector<std::string> includeServiceRegexes;
+    if (nh.has_parameter("include_services"))
+    {
+        includeServiceRegexes = nh.get_parameter("include_services").as_string_array();
+    }
+    TopicFilter topicFilter(excludeRegexes, includeRegexes, excludeServiceRegexes, includeServiceRegexes);
 
     const double processFrequency = nh.get_parameter("process_frequency").as_double();
 
@@ -137,22 +152,15 @@ int main(int argc, char** argv)
     }
     cfg.maxMemoryBytes = size_t(maxMemoryMb) * size_t(1024 * 1024);
     cfg.niceOnWrite = nh.get_parameter("nice_on_write").as_bool();
+    cfg.reductionRules = snapshotter::parseReductionRules(nh);
 
     BagCompression compression = getCompression(nh);
 
     snapshotter::SnapshotNode node{nh, cfg, compression, topicFilter};
 
-    rclcpp::executors::SingleThreadedExecutor executor;
+    rclcpp::executors::EventsCBGExecutor executor;
     executor.add_node(nh.get_node_base_interface());
 
-    while (rclcpp::ok())
-    {
-        rclcpp::WallRate processRate(processFrequency);
-
-        // process all available events and return
-        executor.spin_some();
-        processRate.sleep();
-    }
-
+    executor.spin();
     return 0;
 }

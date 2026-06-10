@@ -37,9 +37,10 @@
 #include <mutex>
 #include <optional>
 #include <rmw/rmw.h>
+#include <rosbag2_cpp/service_utils.hpp>
 #include <rosbag2_cpp/writer.hpp>
 #include <rosbag2_cpp/writers/sequential_writer.hpp>
-#include <rosbag2_transport/qos.hpp>
+#include <rosbag2_storage/qos.hpp>
 #include <rosbag2_transport/recorder.hpp>
 #include <sys/resource.h>
 #include <thread>
@@ -70,9 +71,20 @@ std::string convertOfferedQosToYaml(const std::vector<rclcpp::TopicEndpointInfo>
     //       This does not cause any problems when replaying the bag, but it is still ugly.
     for (const auto& info : endpointInfos)
     {
-        yaml.push_back(rosbag2_transport::Rosbag2QoS(info.qos_profile()));
+        yaml.push_back(rosbag2_storage::Rosbag2QoS(info.qos_profile()));
     }
     return YAML::Dump(yaml);
+}
+
+std::vector<rclcpp::QoS> convertToQos(const std::vector<rclcpp::TopicEndpointInfo>& endpointInfos)
+{
+    std::vector<rclcpp::QoS> ret;
+    ret.reserve(endpointInfos.size());
+    for (const auto& info : endpointInfos)
+    {
+        ret.push_back(rosbag2_storage::Rosbag2QoS(info.qos_profile()));
+    }
+    return ret;
 }
 
 std::string getTopicType(const std::vector<rclcpp::TopicEndpointInfo>& endpointInfos)
@@ -103,7 +115,7 @@ bool Snapshotter::subscribe(const std::string& topic)
         const rosbag2_storage::TopicMetadata rosMd{.name = topic,
                                                    .type = getTopicType(pubInfo),
                                                    .serialization_format = rmw_get_serialization_format(),
-                                                   .offered_qos_profiles = convertOfferedQosToYaml(pubInfo),
+                                                   .offered_qos_profiles = convertToQos(pubInfo),
                                                    .type_description_hash =
                                                        rosbag2_transport::type_description_hash_for_topic(pubInfo)};
 
@@ -136,7 +148,14 @@ bool Snapshotter::subscribe(const std::string& topic)
     return true;
 }
 
-void Snapshotter::writeBagFile(const std::string& path, BagCompression compression, const WriteDoneCb& cb)
+bool Snapshotter::subscribeService(const std::string& serviceName)
+{
+    const std::string eventTopic = rosbag2_cpp::service_name_to_service_event_topic_name(serviceName);
+    return subscribe(eventTopic);
+}
+
+void Snapshotter::writeBagFile(const std::string& path, std::optional<std::string> reducedPath,
+                               BagCompression compression, const WriteDoneCb& cb)
 {
     // writing is done in a separate thread because errors might happen
     // during writing and there is no guaranteed way to reset the
@@ -151,11 +170,11 @@ void Snapshotter::writeBagFile(const std::string& path, BagCompression compressi
     std::unique_lock<std::mutex> lock(writerRunningLock, std::try_to_lock);
     if (!lock.owns_lock())
     {
-        cb(BagWriteException("Snapshotter is already writing a bag file"));
+        cb(BagWriteException("Snapshotter is already writing a bag file"), rclcpp::Time(), rclcpp::Time());
         return;
     }
 
-    writer = std::jthread([path, compression, cb, this, lock = std::move(lock)]() mutable {
+    writer = std::jthread([path, reducedPath, compression, cb, this, lock = std::move(lock)]() mutable {
         using namespace rosbag2_cpp;
 
         // move lock to local scope to ensure that it is released when the lambda execution ends
@@ -170,7 +189,7 @@ void Snapshotter::writeBagFile(const std::string& path, BagCompression compressi
             {
                 const std::string msg = "setpriority failed: " + std::string(std::strerror(errno));
                 RCLCPP_ERROR_STREAM(log, msg);
-                cb(BagWriteException(msg));
+                cb(BagWriteException(msg), rclcpp::Time(), rclcpp::Time());
                 return;
             }
         }
@@ -225,27 +244,45 @@ void Snapshotter::writeBagFile(const std::string& path, BagCompression compressi
         {
             writer.open(storageOpts);
 
+            rclcpp::Time firstTimestamp = bufferCopy->getOldestReceiveTime();
+            rclcpp::Time lastTimestamp = bufferCopy->getNewestReceiveTime();
+
             /** write all old latched messages 3 seconds before the actual log starts.
              *  The value 3 is arbitrary. The idea is to make the old latched messages stand out
              *  to a human reader when looking at the bag. We do the calculation in double because rclcpp::Time will
              * throw when the time becomes negative (which can happen when running in simulation because sim time
              * starts at 0) */
-            rclcpp::Time latchedTime = bufferCopy->getOldestReceiveTime() - std::chrono::seconds(3);
+            rclcpp::Time latchedTime = firstTimestamp - std::chrono::seconds(3);
             latchedTime = std::max(latchedTime, rclcpp::Time(static_cast<int64_t>(0), RCL_ROS_TIME));
             latchedBufferCopy->writeToBag(writer, metaData, latchedTime);
 
             bufferCopy->writeToBag(writer, metaData);
             writer.close();
 
-            cb(std::nullopt);
+            if (reducedPath.has_value())
+            {
+                std::unique_ptr<rosbag2_cpp::writer_interfaces::BaseWriterInterface> reducedWriterImpl;
+                reducedWriterImpl = std::make_unique<rosbag2_cpp::writers::SequentialWriter>();
+                rosbag2_cpp::Writer reducedWriter(std::move(reducedWriterImpl));
+
+                rosbag2_storage::StorageOptions reducedStorageOpts = storageOpts;
+                reducedStorageOpts.uri = *reducedPath;
+                reducedWriter.open(reducedStorageOpts);
+
+                latchedBufferCopy->writeToBag(reducedWriter, metaData, latchedTime);
+                bufferCopy->writeToBag(reducedWriter, metaData, cfg.reductionRules);
+                reducedWriter.close();
+            }
+
+            cb(std::nullopt, firstTimestamp, lastTimestamp);
         }
         catch (const std::exception& e)
         {
-            cb(BagWriteException(e.what()));
+            cb(BagWriteException(e.what()), rclcpp::Time(), rclcpp::Time());
         }
         catch (...) // we really really don't want to crash :D
         {
-            cb(BagWriteException("unknown error"));
+            cb(BagWriteException("unknown error"), rclcpp::Time(), rclcpp::Time());
         }
         const auto elapsedTime =
             std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - startTime);

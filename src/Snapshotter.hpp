@@ -34,6 +34,7 @@
 #pragma once
 #include "Common.hpp"
 #include "MessageRingBuffer.hpp"
+#include "ReductionRule.hpp"
 #include "SingleMessageBuffer.hpp"
 #include <atomic>
 #include <memory>
@@ -56,6 +57,8 @@ public:
         /** If true the snapshotter will set the thread nice value to 19 when
          *  writing a bag file. see manpage setpriority(2) for details. */
         bool niceOnWrite;
+        /** Rules applied when writing the reduced snapshot. First matching rule wins. */
+        std::vector<ReductionRule> reductionRules;
     };
 
     Snapshotter(rclcpp::Node& nh, const Config& cfg);
@@ -67,17 +70,27 @@ public:
      *  If the topic is already subscribed nothing will happen. */
     bool subscribe(const std::string& topic);
 
+    /** The snapshotter will subscribe to the service event topic for the given @p serviceName and log it.
+     *  The service name should be the plain service name (e.g. /my_service), not the event topic name.
+     *  If the service event topic is already subscribed nothing will happen. */
+    bool subscribeService(const std::string& serviceName);
+
     /** The callback will be invoked when the writing is either done or an error occurred.
      *  It will be invoked from a different thread than the one that called writeBagFile.
      *  @note The callback may not throw an exception.
-     *  @p error will contain the error, if any error occurred. If writing finished successfully it will be nullopt.*/
-    using WriteDoneCb = std::function<void(const std::optional<BagWriteException>& error)>;
+     *  @p error will contain the error, if any error occurred. If writing finished successfully it will be nullopt.
+     *  @p firstTimestamp will be the first timestamp in the bag (excluding latched topics).
+     *  @p lastTimestamp will be the last timestamp in the bag.*/
+    using WriteDoneCb = std::function<void(const std::optional<BagWriteException>& error,
+                                           const rclcpp::Time& firstTimestamp, const rclcpp::Time& lastTimestamp)>;
 
     /** async writes the bag file.
      *  Recording of data continues while writing.
      *  This method is not blocking.
+     *  @param reducedPath path for the reduced snapshot bag. If nullopt no reduced bag is written.
      *  @param cb will be invoked when the writing is either done or an error occurred.*/
-    void writeBagFile(const std::string& path, BagCompression compression, const WriteDoneCb& cb);
+    void writeBagFile(const std::string& path, std::optional<std::string> reducedPath, BagCompression compression,
+                      const WriteDoneCb& cb);
 
 private:
     void topicCB(const SerializedMsgPtr& msg, const TopicMetadata& md);

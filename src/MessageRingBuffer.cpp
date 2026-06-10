@@ -33,7 +33,9 @@
  ********************************************************************/
 #include "MessageRingBuffer.hpp"
 #include <rclcpp/logging.hpp>
+#include <regex>
 #include <rosbag2_cpp/writer.hpp>
+#include <unordered_map>
 
 namespace snapshotter
 {
@@ -108,9 +110,8 @@ void MessageRingBuffer::writeToBag(rosbag2_cpp::Writer& writer, const std::vecto
 {
     std::scoped_lock lock(bufferLock);
 
-    for (const BufferEntry& entry : buffer)
+    for (const TopicMetadata& md : topicMetadata)
     {
-        const TopicMetadata& md(topicMetadata[entry.topicMetaDataIdx]);
         writer.create_topic(md.rosMetadata);
     }
 
@@ -131,6 +132,85 @@ void MessageRingBuffer::writeToBag(rosbag2_cpp::Writer& writer, const std::vecto
                                "Message timestamp < rclcpp::Time(0). Replacing timestamp with rclcpp::Time(0). Topic:"
                                    << md.rosMetadata.name);
         }
+    }
+}
+
+void MessageRingBuffer::writeToBag(rosbag2_cpp::Writer& writer, const std::vector<TopicMetadata>& topicMetadata,
+                                   const std::vector<ReductionRule>& rules) const
+{
+    std::scoped_lock lock(bufferLock);
+
+    for (const TopicMetadata& md : topicMetadata)
+    {
+        writer.create_topic(md.rosMetadata);
+    }
+
+    // Build a map from topicMetaDataIdx to the first matching rule (nullptr = no rule).
+    // This avoids re-running every regexp for every message.
+    std::unordered_map<uint16_t, const ReductionRule*> ruleForTopic;
+    for (size_t i = 0; i < topicMetadata.size(); ++i)
+    {
+        const std::string& topicName = topicMetadata[i].rosMetadata.name;
+        const ReductionRule* matched = nullptr;
+        for (const ReductionRule& rule : rules)
+        {
+            const std::regex& topicRegexp =
+                std::visit([](const auto& r) -> const std::regex& { return r.topicRegexp; }, rule);
+            if (std::regex_match(topicName, topicRegexp))
+            {
+                matched = &rule;
+                break;
+            }
+        }
+        ruleForTopic[static_cast<uint16_t>(i)] = matched;
+    }
+
+    // Per-topic state for rate limiting.
+    std::unordered_map<uint16_t, rclcpp::Time> lastWrittenTime;
+
+    for (const BufferEntry& entry : buffer)
+    {
+        const ReductionRule* rule = ruleForTopic.at(entry.topicMetaDataIdx);
+        if (rule)
+        {
+            const bool shouldWrite = std::visit(
+                [&](const auto& r) -> bool {
+                    using T = std::decay_t<decltype(r)>;
+                    if constexpr (std::is_same_v<T, DropRule>)
+                    {
+                        return false; // drop this message
+                    }
+                    else if constexpr (std::is_same_v<T, ReduceRule>)
+                    {
+                        auto it = lastWrittenTime.find(entry.topicMetaDataIdx);
+                        if (it == lastWrittenTime.end())
+                        {
+                            lastWrittenTime.emplace(entry.topicMetaDataIdx, entry.receiveTime);
+                            return true;
+                        }
+                        else
+                        {
+                            const rclcpp::Duration elapsed = entry.receiveTime - it->second;
+                            if (elapsed < r.minInterval)
+                            {
+                                return false; // skip this message
+                            }
+                            it->second = entry.receiveTime;
+                            return true;
+                        }
+                    }
+                },
+                *rule);
+
+            if (!shouldWrite)
+            {
+                continue;
+            }
+        }
+
+        const TopicMetadata& md(topicMetadata[entry.topicMetaDataIdx]);
+        const rclcpp::Time writeTime = entry.receiveTime >= minValidTimeStamp ? entry.receiveTime : minValidTimeStamp;
+        writer.write(entry.msg, md.rosMetadata.name, md.rosMetadata.type, writeTime);
     }
 }
 
@@ -159,6 +239,22 @@ rclcpp::Time MessageRingBuffer::getOldestReceiveTime() const
         oldestTime = std::min(oldestTime, entry.receiveTime);
     }
     return oldestTime;
+}
+
+rclcpp::Time MessageRingBuffer::getNewestReceiveTime() const
+{
+    std::scoped_lock lock(bufferLock);
+    if (buffer.empty())
+    {
+        return minValidTimeStamp;
+    }
+
+    rclcpp::Time newestTime = buffer.front().receiveTime;
+    for (const BufferEntry& entry : buffer)
+    {
+        newestTime = std::max(newestTime, entry.receiveTime);
+    }
+    return newestTime;
 }
 
 } // namespace snapshotter
