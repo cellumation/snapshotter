@@ -252,8 +252,10 @@ void Snapshotter::writeBagFile(const std::string& path, std::optional<std::strin
              *  to a human reader when looking at the bag. We do the calculation in double because rclcpp::Time will
              * throw when the time becomes negative (which can happen when running in simulation because sim time
              * starts at 0) */
-            rclcpp::Time latchedTime = firstTimestamp - std::chrono::seconds(3);
-            latchedTime = std::max(latchedTime, rclcpp::Time(static_cast<int64_t>(0), RCL_ROS_TIME));
+
+            const rclcpp::Time latchedTime = firstTimestamp < rclcpp::Time{3, 0, firstTimestamp.get_clock_type()}
+                                                 ? rclcpp::Time{0, 0, firstTimestamp.get_clock_type()}
+                                                 : firstTimestamp - std::chrono::seconds(3);
             latchedBufferCopy->writeToBag(writer, metaData, latchedTime);
 
             bufferCopy->writeToBag(writer, metaData);
