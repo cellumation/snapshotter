@@ -9,7 +9,6 @@
 
 namespace snapshotter
 {
-
 class SnapshotNode
 {
 public:
@@ -34,5 +33,4 @@ private:
     // because the callback from the snapshotter will access the node
     Snapshotter snapshotter;
 };
-
 } // namespace snapshotter

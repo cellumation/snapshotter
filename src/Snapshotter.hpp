@@ -116,5 +116,4 @@ private:
     /** The thread used for all write operations */
     std::jthread writer;
 };
-
 } // namespace snapshotter

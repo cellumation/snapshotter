@@ -6,7 +6,6 @@
 
 namespace snapshotter
 {
-
 SnapshotNode::SnapshotNode(rclcpp::Node& nh, const snapshotter::Snapshotter::Config& cfg, BagCompression compression,
                            const TopicFilter& topicFilter) :
     nh{nh},
@@ -94,5 +93,4 @@ void SnapshotNode::subscribeTopics()
         }
     }
 }
-
 } // namespace snapshotter

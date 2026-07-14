@@ -1,4 +1,3 @@
-
 #include "Common.hpp"
 #include "ReductionRule.hpp"
 #include "Snapshotter.hpp"

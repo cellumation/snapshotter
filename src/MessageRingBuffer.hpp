@@ -108,5 +108,4 @@ private:
     std::function<void(BufferEntry&&)> droppedCb;
     size_t currentSize; // in bytes
 };
-
 } // namespace snapshotter

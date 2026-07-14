@@ -344,5 +344,4 @@ void Snapshotter::messageDroppedFromBufferCB(BufferEntry&& entry)
         lastDroppedLatchedMsgs.push(std::move(entry), true);
     }
 }
-
 } // namespace snapshotter

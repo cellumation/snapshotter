@@ -97,5 +97,4 @@ struct BufferEntry
         topicMetaDataIdx(md.metaDataIdx)
     {}
 };
-
 } // namespace snapshotter
