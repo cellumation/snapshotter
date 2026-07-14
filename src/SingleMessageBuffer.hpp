@@ -68,5 +68,4 @@ private:
     std::unordered_map<uint16_t, BufferEntry> messages;
     mutable std::mutex messagesLock;
 };
-
 } // namespace snapshotter

@@ -90,5 +90,4 @@ void SingleMessageBuffer::writeToBag(rosbag2_cpp::Writer& writer, const std::vec
         writer.write(entry.msg, md.rosMetadata.name, md.rosMetadata.type, rewriteTimestamp);
     }
 }
-
 } // namespace snapshotter

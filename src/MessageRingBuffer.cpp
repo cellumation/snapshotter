@@ -256,5 +256,4 @@ rclcpp::Time MessageRingBuffer::getNewestReceiveTime() const
     }
     return newestTime;
 }
-
 } // namespace snapshotter

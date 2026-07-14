@@ -41,7 +41,6 @@
 
 namespace snapshotter
 {
-
 struct DropRule
 {
     std::regex topicRegexp;
@@ -115,5 +114,4 @@ inline std::vector<ReductionRule> parseReductionRules(rclcpp::Node& nh)
 
     return rules;
 }
-
 } // namespace snapshotter
