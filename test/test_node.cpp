@@ -790,6 +790,7 @@ int main(int argc, char** argv)
     int result = RUN_ALL_TESTS();
 
     clearLogFolder();
+    rclcpp::shutdown();
 
     return result;
 }
